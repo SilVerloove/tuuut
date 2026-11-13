@@ -1121,12 +1121,12 @@ async function renderView(scrollTo){
   const sumW = eff.reduce((a, s) => a + s.w, 0), maxH = Math.max.apply(null, eff.map(s => s.h));
   const fitW = (W - gap) / sumW;
   const scale = SET.fit === "width" ? fitW : Math.min(fitW, H / maxH);
-  const dpr = DPR();
   const frag = document.createDocumentFragment(); const views = [];
   list.forEach((p, i) => {
     const b = boxes[i], cw = Math.floor(sizes[i].w * scale), ch = Math.floor(sizes[i].h * scale);
     const d = document.createElement("div"); d.className = "pg"; d.style.width = Math.floor(eff[i].w * scale) + "px"; d.style.height = Math.floor(eff[i].h * scale) + "px"; d.dataset.p = p;
     const pin = document.createElement("div"); pin.className = "pin"; pin.style.cssText = "left:" + (-Math.round(b[0] * cw)) + "px;top:" + (-Math.round(b[1] * ch)) + "px;width:" + cw + "px;height:" + ch + "px";
+    const dpr = pxDpr(cw, ch);
     const c1 = document.createElement("canvas"); c1.className = "pdf"; c1.width = Math.round(cw * dpr); c1.height = Math.round(ch * dpr);
     const c2 = document.createElement("canvas"); c2.className = "ink"; c2.width = c1.width; c2.height = c1.height;
     pin.appendChild(c1); pin.appendChild(c2); d.appendChild(pin); frag.appendChild(d);
@@ -1141,7 +1141,7 @@ async function renderView(scrollTo){
     if(tok !== R.token) return;
     const ahead = []; for(let p = R.page + cnt; p < R.page + cnt * 2 && p <= n; p++) ahead.push(p);
     const behind = []; for(let p = Math.max(1, R.page - cnt); p < R.page; p++) behind.push(p);
-    ahead.concat(behind).forEach(async p => { trimBox(p); const s = await pageSize(p); const sc = scale; getRendered(p, Math.round(Math.floor(s.w * sc) * DPR())); loadMarks(p); });
+    ahead.concat(behind).forEach(async p => { trimBox(p); const s = await pageSize(p); const sc = scale; const pw = Math.floor(s.w * sc), ph = Math.floor(s.h * sc); getRendered(p, Math.round(pw * pxDpr(pw, ph))); loadMarks(p); });
   }, 120);
 }
 async function trimBox(p){
@@ -1164,6 +1164,8 @@ async function trimBox(p){
   }catch(e){}
   R.trim[p] = box; return box;
 }
+/* keep every canvas under ~6 MP: tablets run out of graphics memory with large canvases and show a black page */
+function pxDpr(cw, ch){ return Math.max(1, Math.min(DPR(), Math.sqrt(6e6 / Math.max(1, cw * ch)))); }
 function getRendered(p, pxW){
   const key = p + "@" + pxW;
   if(R.cache.has(key)) return R.cache.get(key);
@@ -1176,7 +1178,7 @@ function getRendered(p, pxW){
   })();
   job.catch(() => R.cache.delete(key));
   R.cache.set(key, job);
-  if(R.cache.size > 14){ const first = R.cache.keys().next().value; R.cache.delete(first); }
+  if(R.cache.size > 6){ const first = R.cache.keys().next().value; R.cache.delete(first); }
   return job;
 }
 async function drawPage(v){
@@ -1461,7 +1463,6 @@ function norm(e, v){ const r = v.ink.getBoundingClientRect(); return [Math.round
 function bindInk(v){
   let cur = null, last = null;
   const c = v.ink;
-  try{ c.getContext("2d", { desynchronized:true }); }catch(err){}
   c.addEventListener("pointerdown", e => {
     if(!canDraw(e)) return;
     if(e.pointerType === "mouse" && e.button !== 0) return;
