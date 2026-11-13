@@ -873,7 +873,7 @@ function partInfo(s){
   return m ? { base:m[1].trim(), part:m[2].trim() } : { base:t, part:"" };
 }
 function groupKey(s){ return partInfo(s).base.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
-function partRank(s){ const p = partInfo(s).part.toLowerCase(); return (/\bbas/.test(p) ? "~" : "") + p; }
+function partRank(s){ const p = partInfo(s).part.toLowerCase(); return (/\bbas/.test(p) ? "zz " : "") + p; }
 function partSort(a, b){ return partRank(a).localeCompare(partRank(b), "nl", { numeric:true }); }
 function siblings(s){ const k = groupKey(s); return Object.values(S.scores).filter(x => groupKey(x) === k && partInfo(x).part).sort(partSort); }
 function filteredScores(){
