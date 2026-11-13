@@ -170,6 +170,13 @@ button.pgno{background:transparent;border:1px solid var(--chrome-line);border-ra
 .recs .rh{display:flex;align-items:center;gap:8px;font-size:14px}
 .recs .rh span{flex:1;min-width:0;color:var(--chrome-muted)}
 .recs audio{width:100%;height:40px}
+.card{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.card img{-webkit-user-drag:none}
+.card.lift{opacity:.35}
+.card.drop .thumb{outline:4px solid var(--brass-fill);outline-offset:3px}
+.dragghost{position:fixed;z-index:90;width:110px;pointer-events:none;transform:translate(-50%,-60%) rotate(-4deg);border-radius:8px;overflow:hidden;box-shadow:0 18px 40px rgba(0,0,0,.45);background:#fff;border:2px solid var(--ink)}
+.dragghost img{width:100%;display:block}
+.dragghost span{display:block;padding:4px 6px;font-size:12px;font-weight:700;color:#111;background:var(--brass-fill)}
 .partn{display:inline-flex;align-items:center;gap:4px;align-self:flex-start;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--brass-soft);color:var(--brass);margin-top:-4px}
 .cb.part{max-width:34vw}.cb.part span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .parts{display:flex;flex-direction:column;gap:6px}
@@ -886,6 +893,7 @@ function orchTags(ids){ return (ids || []).filter(i => S.orchestras[i]).map(i =>
 const PART_RE = /^(.*?)\s*[–—-]\s*((?:\d+(?:st|nd|rd|th|e|de|ste)?\.?\s*)?(?:bas(?:s)?\s*)?(?:trombones?|tromb|trom|trb|tbn|bone|posaune|trumpets?|tpt|trp|alto|tenor|bari\w*|(?:\w+\s)?sax\w*|horn\w*|hoorn|tuba|flute|fluit|clarinet\w*|klarinet\w*|piano|keys|keyboards?|drums?|bass|bas|guitar|gitaar|vocals?|vox|zang)\b.*)$/i;
 function partInfo(s){
   const t = s.title || "";
+  if(s.group) return { base:s.group, part:s.part || t };
   if(s.part){ const i = t.toLowerCase().lastIndexOf(s.part.toLowerCase()); return { base:(i > 0 ? t.slice(0, i) : t).replace(/[\s–—-]+$/, ""), part:s.part }; }
   const m = t.match(PART_RE);
   return m ? { base:m[1].trim(), part:m[2].trim() } : { base:t, part:"" };
@@ -894,6 +902,56 @@ function groupKey(s){ return partInfo(s).base.toLowerCase().replace(/[^a-z0-9]+/
 function partRank(s){ const p = partInfo(s).part.toLowerCase(); return (/\bbas/.test(p) ? "zz " : "") + p; }
 function partSort(a, b){ return partRank(a).localeCompare(partRank(b), "nl", { numeric:true }); }
 function siblings(s){ const k = groupKey(s); return Object.values(S.scores).filter(x => groupKey(x) === k && partInfo(x).part).sort(partSort); }
+function pieceNames(){ const m = {}; Object.values(S.scores).forEach(x => { const b = partInfo(x).base; if(b) m[b.toLowerCase()] = b; }); return Object.values(m).sort((a, b) => a.localeCompare(b, "nl")); }
+function mergeSheet(src, dst){
+  const dpi = partInfo(dst), base = dpi.part ? dpi.base : dst.title, needDst = !dpi.part;
+  const spi = partInfo(src);
+  sheet('<h2>Samenvoegen</h2><p class="hint">“' + esc(src.title) + '” wordt een partij van <b>' + esc(base) + "</b>. In de lijst staat het stuk dan één keer; in de partituur kies je bovenaan de partij.</p>" +
+    '<label class="field">Naam van deze partij<input id="mgP" value="' + esc(spi.part || src.part || "Trombone 2") + '"></label>' +
+    (needDst ? '<label class="field">Naam van de partij die er al stond<input id="mgD" value="' + esc(dst.part || "Trombone 1") + '"></label>' : "") +
+    '<div class="acts"><button class="btn ghost" type="button" id="mgX">Annuleren</button><button class="btn primary" type="button" id="mgOk">Samenvoegen</button></div>',
+    (sh, close) => {
+      $("#mgX", sh).onclick = close;
+      $("#mgOk", sh).onclick = async () => {
+        const orchs = Array.from(new Set((src.orchestras || []).concat(dst.orchestras || [])));
+        const a = Object.assign({}, src, { group:base, part:$("#mgP", sh).value.trim() || "Partij", orchestras:orchs, title:base + " – " + ($("#mgP", sh).value.trim() || "Partij") }); delete a._n;
+        await Store.put("scores", src.id, a);
+        if(needDst){ const pd = $("#mgD", sh).value.trim() || "Partij 1"; const b = Object.assign({}, dst, { group:base, part:pd, title:base + " – " + pd }); delete b._n; await Store.put("scores", dst.id, b); }
+        close(); toast("Samengevoegd met " + base + ".");
+      };
+    });
+}
+/* long-press a card and drop it on another card to merge them */
+const DG = { t:0, on:false, src:null, ghost:null, over:null, x:0, y:0, block:false };
+function dgEnd(){ clearTimeout(DG.t); if(DG.ghost) DG.ghost.remove(); $$(".card.lift,.card.drop").forEach(c => c.classList.remove("lift", "drop")); DG.on = false; DG.ghost = null; DG.over = null; }
+$("#view").addEventListener("pointerdown", e => {
+  const card = e.target.closest(".card"); if(!card || S.readOnly || e.target.closest(".more,.listen") || (e.pointerType === "mouse" && e.button !== 0)) return;
+  DG.src = card; DG.x = e.clientX; DG.y = e.clientY; clearTimeout(DG.t);
+  DG.t = setTimeout(() => {
+    DG.on = true; DG.block = true; card.classList.add("lift");
+    const s = S.scores[card.dataset.id]; const g = document.createElement("div"); g.className = "dragghost";
+    const img = $("img", card); g.innerHTML = (img && !img.hidden ? '<img alt="" src="' + img.src + '">' : "") + "<span>" + esc(s ? partInfo(s).base || s.title : "") + "</span>";
+    g.style.left = DG.x + "px"; g.style.top = DG.y + "px"; document.body.appendChild(g); DG.ghost = g;
+    if(navigator.vibrate) try{ navigator.vibrate(15); }catch(err){}
+    toast("Sleep naar het stuk waar deze partij bij hoort.", 2200);
+  }, 480);
+});
+window.addEventListener("pointermove", e => {
+  if(!DG.src) return;
+  if(!DG.on){ if(Math.abs(e.clientX - DG.x) + Math.abs(e.clientY - DG.y) > 12){ clearTimeout(DG.t); DG.src = null; } return; }
+  DG.ghost.style.left = e.clientX + "px"; DG.ghost.style.top = e.clientY + "px";
+  const el = document.elementFromPoint(e.clientX, e.clientY); const c = el && el.closest(".card");
+  const over = c && c !== DG.src ? c : null;
+  if(over !== DG.over){ if(DG.over) DG.over.classList.remove("drop"); if(over) over.classList.add("drop"); DG.over = over; }
+});
+window.addEventListener("touchmove", e => { if(DG.on) e.preventDefault(); }, { passive:false });
+window.addEventListener("pointerup", () => {
+  if(!DG.src) return; const src = DG.src, over = DG.over, was = DG.on; DG.src = null; dgEnd();
+  if(was && over){ const a = S.scores[src.dataset.id], b = S.scores[over.dataset.id]; if(a && b) mergeSheet(a, b); }
+  setTimeout(() => { DG.block = false; }, 50);
+});
+window.addEventListener("pointercancel", () => { DG.src = null; dgEnd(); setTimeout(() => { DG.block = false; }, 50); });
+$("#view").addEventListener("contextmenu", e => { if(e.target.closest(".card")) e.preventDefault(); });
 function filteredScores(){
   const q = S.q.trim().toLowerCase();
   let arr = Object.values(S.scores).filter(s => S.filter === "all" || (s.orchestras || []).includes(S.filter));
@@ -943,7 +1001,7 @@ function drawLib(){
     v.innerHTML = '<div class="grid">' + arr.map(s => (
       '<div class="card" data-id="' + esc(s.id) + '">' +
         '<button class="open" type="button" data-act="open">' +
-          '<div class="thumb"><img alt="" hidden><div class="ph">𝄢</div>' + (s.example ? '<span class="badge">Voorbeeld</span>' : "") + '<span class="pages">' + (s.pages || "?") + " p.</span></div>" +
+          '<div class="thumb"><img alt="" draggable="false" hidden><div class="ph">𝄢</div>' + (s.example ? '<span class="badge">Voorbeeld</span>' : "") + '<span class="pages">' + (s.pages || "?") + " p.</span></div>" +
           '<span class="t">' + esc(s._n > 1 ? partInfo(s).base : s.title) + "</span>" +
           '<span class="m">' + esc((s._n > 1 ? [partInfo(s).part, s.composer] : [s.part, s.composer]).filter(Boolean).join(" · ") || " ") + "</span>" +
           (s._n > 1 ? '<span class="partn">' + s._n + " partijen</span>" : "") +
@@ -993,6 +1051,7 @@ $("#chips").addEventListener("click", e => {
 $("#view").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b) return;
   const card = b.closest(".card"), set = b.closest(".set");
+  if(DG.block) return;
   if(b.dataset.act === "open" && card) openReader([card.dataset.id], 0);
   if(b.dataset.act === "edit" && card) scoreSheet(S.scores[card.dataset.id]);
   if(b.dataset.act === "newSet") setSheet(null);
@@ -1031,6 +1090,7 @@ function scoreSheet(s){
     "<h2>Partituur bewerken</h2>" +
     '<label class="field">Titel<input id="fT" value="' + esc(s.title) + '"></label>' +
     '<div class="row"><label class="field">Componist / arrangeur<input id="fC" value="' + esc(s.composer) + '"></label><label class="field">Partij<input id="fP" placeholder="bv. Trombone 1" value="' + esc(s.part) + '"></label></div>' +
+    '<label class="field">Hoort bij stuk (voor meerdere partijen van hetzelfde nummer)<input id="fG" list="fGl" placeholder="leeg = apart stuk" value="' + esc(s.group || (partInfo(s).part && siblings(s).length > 1 ? partInfo(s).base : "")) + '"><datalist id="fGl">' + pieceNames().map(n => '<option value="' + esc(n) + '">').join("") + "</datalist></label>" +
     '<label class="field">Link om te beluisteren (YouTube)<input id="fL" type="url" inputmode="url" placeholder="https://www.youtube.com/watch?v=…" value="' + esc(s.link || "") + '"></label>' +
     '<p class="hint" style="margin-top:-8px"><a href="' + esc(ytSearch(s)) + '" target="_blank" rel="noopener" id="fYt">Zoek dit stuk op YouTube</a> en plak de link van de opname hierboven.</p>' +
     '<div class="field">Orkesten<div class="pick">' + (orchs.length ? orchs.map(o => '<label><input type="checkbox" value="' + esc(o.id) + '"' + ((s.orchestras || []).includes(o.id) ? " checked" : "") + '><i class="dot" style="width:10px;height:10px;border-radius:50%;background:' + esc(o.color) + '"></i>' + esc(o.name) + "</label>").join("") : '<span class="hint">Maak eerst een orkest aan met + Orkest.</span>') + "</div></div>" +
@@ -1039,8 +1099,10 @@ function scoreSheet(s){
     (sh, close) => {
       $("#fX", sh).onclick = close;
       $("#fOk", sh).onclick = async () => {
-        const fields = { title:$("#fT", sh).value.trim() || s.title, composer:$("#fC", sh).value.trim(), part:$("#fP", sh).value.trim(), link:$("#fL", sh).value.trim(), orchestras:$$(".pick input:checked", sh).map(i => i.value) };
-        await Store.put("scores", s.id, Object.assign({}, s, fields));
+        const fields = { title:$("#fT", sh).value.trim() || s.title, composer:$("#fC", sh).value.trim(), part:$("#fP", sh).value.trim(), link:$("#fL", sh).value.trim(), orchestras:$$(".pick input:checked", sh).map(i => i.value), group:$("#fG", sh).value.trim() };
+        if(fields.group && !fields.part) fields.part = partInfo(s).part || fields.title;
+        const rec = Object.assign({}, s, fields); delete rec._n; if(!rec.group) delete rec.group;
+        await Store.put("scores", s.id, rec);
         const fs = $("#fS", sh); if(fs && fs.value){ const l = S.setlists[fs.value]; await Store.put("setlists", l.id, Object.assign({}, l, { items:(l.items || []).concat(s.id) })); }
         close(); toast("Opgeslagen.");
       };
