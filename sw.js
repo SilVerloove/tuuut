@@ -1,12 +1,13 @@
 /* TUUUT service worker: everything cached on the device so the app opens without internet */
-const VERSION = "tuuut-v4";
+const VERSION = "tuuut-v5";
 const FILES = ["./", "index.html", "manifest.webmanifest", "lib/pdf.min.js", "lib/pdf.worker.min.js", "voorbeeld-ode.pdf",
   "icon-192.png", "icon-512.png", "icon-maskable-512.png",
   "fonts/unbounded-latin-500-normal.woff2", "fonts/unbounded-latin-700-normal.woff2", "fonts/unbounded-latin-800-normal.woff2",
   "fonts/atkinson-hyperlegible-latin-400-normal.woff2", "fonts/atkinson-hyperlegible-latin-700-normal.woff2", "fonts/atkinson-hyperlegible-latin-400-italic.woff2"];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES.map(f => new Request(f, { cache: "reload" })))));
+  /* take over at once, so a new version never waits until every window is closed */
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES.map(f => new Request(f, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSION && k !== "tuuut-share").map(k => caches.delete(k)))).then(() => self.clients.claim()));
@@ -35,7 +36,15 @@ self.addEventListener("fetch", e => {
   /* cache first (works on stage without signal), refresh in the background when online */
   e.respondWith((async () => {
     const c = await caches.open(VERSION);
-    const key = req.mode === "navigate" ? "index.html" : req;
+    if(req.mode === "navigate"){
+      const net = fetch(req, { cache: "no-cache" }).then(r => { if(r && r.ok) c.put("index.html", r.clone()); return r; }).catch(() => null);
+      const quick = await Promise.race([net, new Promise(r => setTimeout(() => r(null), 2500))]);
+      if(quick) return quick;
+      const hit = await c.match("index.html");
+      if(hit){ e.waitUntil(net); return hit; }
+      return (await net) || new Response("Offline", { status: 503 });
+    }
+    const key = req;
     const hit = await c.match(key, { ignoreSearch: req.mode === "navigate" });
     const net = fetch(req).then(r => { if(r && r.ok && req.mode !== "navigate") c.put(req, r.clone()); return r; }).catch(() => null);
     if(hit){ e.waitUntil(net); return hit; }

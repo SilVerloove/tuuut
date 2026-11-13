@@ -189,6 +189,15 @@ button.pgno{background:transparent;border:1px solid var(--chrome-line);border-ra
 .mbar .lt i{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--chrome-muted)}
 .mbar .lt i.on{background:var(--brass-fill);border-color:var(--brass-fill)}
 .mbar .lt i.acc.on{background:var(--hot);border-color:var(--hot)}
+.mbar .seg2{display:contents}
+.mbar .seg2[hidden]{display:none}
+.mbar .nt{min-width:3.4ch;text-align:center;font-weight:800;font-size:20px;line-height:1;font-variant-numeric:tabular-nums}
+.mbar .nt small{display:block;font-size:10px;font-weight:400;color:var(--chrome-muted)}
+.mbar .mm{position:relative;width:110px;height:22px;border-radius:7px;background:linear-gradient(90deg,transparent 0 45%,rgba(155,203,16,.35) 45% 55%,transparent 55%),rgba(255,255,255,.06);border:1px solid var(--chrome-line);overflow:hidden}
+.mbar .mm::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--chrome-muted)}
+.mbar .mm i{position:absolute;top:3px;bottom:3px;width:4px;margin-left:-2px;border-radius:2px;background:var(--hot);left:50%;transition:left .08s linear}
+.mbar .mm i.ok{background:#9BCB10}
+.mbar .ct{min-width:4.5ch;font-size:12px;color:var(--chrome-muted);font-variant-numeric:tabular-nums;text-align:right}
 .mbar .sm{width:32px;font-size:14px;color:var(--chrome-muted)}
 .pop input[type=range]{width:100%;accent-color:#9BCB10;height:36px}
 .jumpn{font-family:var(--display);font-size:28px;text-align:center;font-variant-numeric:tabular-nums}
@@ -400,7 +409,7 @@ body.reading .tk,body.reading .tk-pill{bottom:calc(76px + env(safe-area-inset-bo
     <button class="cb" id="rRec" type="button" aria-pressed="false" aria-label="Opnemen"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></svg><span class="lbl">Opnemen</span></button>
     <button class="cb" id="rRecs" type="button" aria-label="Opnames" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg><b id="rRecsN"></b></button>
     <button class="cb" id="rAnnot" type="button" aria-pressed="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span class="lbl">Aantekenen</span></button>
-    <button class="cb" id="rTk" type="button" aria-label="Metronoom"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6l4 18H5z"/><path d="M12 16 17 6"/><path d="M8 16h8"/></svg><span class="lbl">Metronoom</span></button>
+    <button class="cb" id="rTk" type="button" aria-label="Metronoom en stemapparaat"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6l4 18H5z"/><path d="M12 16 17 6"/><path d="M8 16h8"/></svg><span class="lbl">Metronoom</span></button>
     <button class="cb" id="rView" type="button" aria-pressed="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="4" width="8" height="16" rx="1"/><rect x="13" y="4" width="8" height="16" rx="1"/></svg><span class="lbl">Weergave</span></button>
     <button class="cb" id="rFull" type="button" aria-label="Volledig scherm"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   </div>
@@ -443,12 +452,21 @@ body.reading .tk,body.reading .tk-pill{bottom:calc(76px + env(safe-area-inset-bo
 
   <button class="rx" id="rX" type="button" aria-label="Partituur sluiten"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
   <div class="mbar" id="mbar" hidden role="group" aria-label="Metronoom">
+    <span class="seg2" id="mbM">
     <button class="go" id="mbGo" type="button" aria-label="Metronoom starten"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4v16l13-8z"/></svg></button>
     <button id="mbMinus" type="button" aria-label="Trager">−</button>
     <span class="bpm" id="mbBpm" title="Sleep omhoog/omlaag of tik voor tik-tempo">100<small>bpm</small></span>
     <button id="mbPlus" type="button" aria-label="Sneller">+</button>
     <span class="lt" id="mbLights" aria-hidden="true"></span>
     <button class="sm" id="mbBeats" type="button" aria-label="Maatsoort">4/4</button>
+    </span>
+    <span class="seg2" id="mbT" hidden>
+    <button class="go" id="mbMic" type="button" aria-label="Stemapparaat starten"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    <span class="nt" id="mbNote">–<small>&nbsp;</small></span>
+    <span class="mm" aria-hidden="true"><i id="mbNeedle"></i></span>
+    <span class="ct" id="mbCents"></span>
+    </span>
+    <button class="sm" id="mbMode" type="button" aria-label="Stemapparaat"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M9 2v7a3 3 0 0 0 6 0V2M12 12v10"/></svg></button>
     <button class="sm" id="mbFull" type="button" aria-label="Volledige metronoom en stemmen"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></button>
     <button class="sm" id="mbClose" type="button" aria-label="Metronoombalk sluiten"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
   </div>
@@ -1732,14 +1750,21 @@ function restartIfOn(){ if(M.on){ M.tick = 0; M.queue = []; M.next = Math.max(M.
 $("#tkGo").onclick = () => M.on ? stopMetro() : startMetro();
 /* ---- compact bar in the reader ---- */
 const mbar = $("#mbar");
+function mbMode(m){ T.mb = m; save(); $("#mbM").hidden = m !== "m"; $("#mbT").hidden = m !== "t";
+  $("#mbMode").innerHTML = m === "m" ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M9 2v7a3 3 0 0 0 6 0V2M12 12v10"/></svg>' : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6l4 18H5z"/><path d="M12 16 17 6"/></svg>';
+  $("#mbMode").setAttribute("aria-label", m === "m" ? "Naar stemapparaat" : "Naar metronoom");
+  if(m === "m") stopListen(); else stopMetro();
+  drawMetro(); drawTune(); }
 window.tkMini = {
-  toggle(){ if(mbar.hidden){ panel.hidden = true; pill.hidden = true; mbar.hidden = false; drawMetro(); } else window.tkMini.hide(); },
-  hide(){ mbar.hidden = true; stopMetro(); }
+  toggle(){ if(mbar.hidden){ panel.hidden = true; pill.hidden = true; mbar.hidden = false; mbMode(T.mb || "m"); } else window.tkMini.hide(); },
+  hide(){ mbar.hidden = true; stopMetro(); stopListen(); }
 };
+$("#mbMode").onclick = () => mbMode(T.mb === "t" ? "m" : "t");
+$("#mbMic").onclick = () => L.on ? stopListen() : startListen();
 $("#rTk").onclick = () => window.tkMini.toggle();
 $("#mbGo").onclick = () => M.on ? stopMetro() : startMetro();
 $("#mbClose").onclick = () => window.tkMini.hide();
-$("#mbFull").onclick = () => { mbar.hidden = true; T.tab = "m"; save(); show(); };
+$("#mbFull").onclick = () => { mbar.hidden = true; T.tab = T.mb === "t" ? "t" : "m"; save(); show(); };
 $("#mbBeats").onclick = () => { const order = [4, 3, 2, 6, 5, 7, 1]; T.beats = order[(order.indexOf(T.beats) + 1) % order.length]; save(); restartIfOn(); drawMetro(); };
 [["#mbMinus", -1], ["#mbPlus", 1]].forEach(([id, d]) => { const b = $(id); let rep = null, dly = null;
   b.addEventListener("pointerdown", e => { e.preventDefault(); setBpm(T.bpm + d); dly = setTimeout(() => rep = setInterval(() => setBpm(T.bpm + d), 70), 380); });
@@ -1801,7 +1826,9 @@ $("#tkNames").onclick = e => { const b = e.target.closest("button"); if(!b) retu
 const L = { on:false, stream:null, an:null, buf:null, raf:0, smooth:null, last:0 };
 const STEM_B64 = "PCFkb2N0eXBlIGh0bWw+PGh0bWwgbGFuZz0ibmwiPjxoZWFkPjxtZXRhIGNoYXJzZXQ9InV0Zi04Ij48bWV0YSBuYW1lPSJ2aWV3cG9ydCIgY29udGVudD0id2lkdGg9ZGV2aWNlLXdpZHRoLGluaXRpYWwtc2NhbGU9MSI+PHRpdGxlPlN0ZW1hcHBhcmFhdDwvdGl0bGU+CjxzdHlsZT4KOnJvb3R7LS1iZzojRjRGMUVBOy0tczojZmZmOy0taW5rOiMxMTE7LS1tdTojNUM1QTU1Oy0tbGk6I0RERDhDQzstLWxpbWU6I0M2RjQzMjstLWhvdDojRkY1QTM2fQpAbWVkaWEgKHByZWZlcnMtY29sb3Itc2NoZW1lOmRhcmspezpyb290ey0tYmc6IzBFMEUxMDstLXM6IzE4MTgxQjstLWluazojRjJGMkVFOy0tbXU6I0E1QTVBMDstLWxpOiMzMzMzM0F9fQpib2R5e21hcmdpbjowO2JhY2tncm91bmQ6dmFyKC0tYmcpO2NvbG9yOnZhcigtLWluayk7Zm9udDoxNnB4IHN5c3RlbS11aSwtYXBwbGUtc3lzdGVtLHNhbnMtc2VyaWY7ZGlzcGxheTpmbGV4O2p1c3RpZnktY29udGVudDpjZW50ZXI7cGFkZGluZzoyNHB4IDE2cHh9Ci5je3dpZHRoOjEwMCU7bWF4LXdpZHRoOjQyMHB4O2JhY2tncm91bmQ6dmFyKC0tcyk7Ym9yZGVyOjJweCBzb2xpZCB2YXIoLS1pbmspO2JvcmRlci1yYWRpdXM6MThweDtwYWRkaW5nOjE4cHg7Ym94LXNpemluZzpib3JkZXItYm94O2Rpc3BsYXk6ZmxleDtmbGV4LWRpcmVjdGlvbjpjb2x1bW47Z2FwOjE0cHh9Cmgxe21hcmdpbjowO2ZvbnQtc2l6ZToyMnB4fS5se2ZvbnQtc2l6ZToxMnB4O2ZvbnQtd2VpZ2h0OjcwMDtsZXR0ZXItc3BhY2luZzouMDZlbTt0ZXh0LXRyYW5zZm9ybTp1cHBlcmNhc2U7Y29sb3I6dmFyKC0tbXUpO21hcmdpbjowIDAgNnB4fQoubntkaXNwbGF5OmZsZXg7YWxpZ24taXRlbXM6YmFzZWxpbmU7anVzdGlmeS1jb250ZW50OmNlbnRlcjtnYXA6MTBweH0ubiBie2ZvbnQtc2l6ZTo2NHB4O2ZvbnQtd2VpZ2h0OjgwMDttaW4td2lkdGg6Mi4yY2g7dGV4dC1hbGlnbjpjZW50ZXJ9Lm4gc3Bhbntjb2xvcjp2YXIoLS1tdSk7bWluLXdpZHRoOjljaH0KLm17cG9zaXRpb246cmVsYXRpdmU7aGVpZ2h0OjM2cHg7Ym9yZGVyLXJhZGl1czoxMHB4O2JvcmRlcjoxcHggc29saWQgdmFyKC0tbGkpO2JhY2tncm91bmQ6bGluZWFyLWdyYWRpZW50KDkwZGVnLHRyYW5zcGFyZW50IDQ2JSxyZ2JhKDE1NSwyMDMsMTYsLjM1KSA0NiUgNTQlLHRyYW5zcGFyZW50IDU0JSl9Ci5tOmJlZm9yZXtjb250ZW50OiIiO3Bvc2l0aW9uOmFic29sdXRlO2xlZnQ6NTAlO3RvcDowO2JvdHRvbTowO3dpZHRoOjJweDtiYWNrZ3JvdW5kOnZhcigtLWluayk7b3BhY2l0eTouNX0KI25ke3Bvc2l0aW9uOmFic29sdXRlO3RvcDo0cHg7Ym90dG9tOjRweDt3aWR0aDo2cHg7bWFyZ2luLWxlZnQ6LTNweDtib3JkZXItcmFkaXVzOjNweDtiYWNrZ3JvdW5kOnZhcigtLWhvdCk7bGVmdDo1MCU7dHJhbnNpdGlvbjpsZWZ0IC4wOHMgbGluZWFyfSNuZC5va3tiYWNrZ3JvdW5kOiM1RTlDMDB9Ci5zY3tkaXNwbGF5OmZsZXg7anVzdGlmeS1jb250ZW50OnNwYWNlLWJldHdlZW47Zm9udC1zaXplOjExcHg7Y29sb3I6dmFyKC0tbXUpfQpidXR0b257Zm9udDppbmhlcml0O2NvbG9yOmluaGVyaXQ7Y3Vyc29yOnBvaW50ZXJ9Ci5ie21pbi1oZWlnaHQ6NTJweDtib3JkZXItcmFkaXVzOjE0cHg7Ym9yZGVyOjJweCBzb2xpZCB2YXIoLS1pbmspO2JhY2tncm91bmQ6dmFyKC0tbGltZSk7Y29sb3I6IzExMTtmb250LXdlaWdodDo3MDA7Zm9udC1zaXplOjE3cHh9Ci5zZ3tkaXNwbGF5OmZsZXg7ZmxleC13cmFwOndyYXA7Z2FwOjRweH0uc2cgYnV0dG9ue2ZsZXg6MSAxIGF1dG87bWluLWhlaWdodDo0MHB4O2JvcmRlci1yYWRpdXM6MTBweDtib3JkZXI6MXB4IHNvbGlkIHZhcigtLWxpKTtiYWNrZ3JvdW5kOnRyYW5zcGFyZW50O2ZvbnQtd2VpZ2h0OjcwMH0KLnNnIGJ1dHRvblthcmlhLXByZXNzZWQ9dHJ1ZV17YmFja2dyb3VuZDp2YXIoLS1pbmspO2NvbG9yOnZhcigtLWJnKX0KLmt7ZGlzcGxheTpncmlkO2dyaWQtdGVtcGxhdGUtY29sdW1uczpyZXBlYXQoNiwxZnIpO2dhcDo1cHh9LmsgYnV0dG9ue21pbi1oZWlnaHQ6NDRweDtib3JkZXItcmFkaXVzOjEwcHg7Ym9yZGVyOjFweCBzb2xpZCB2YXIoLS1saSk7YmFja2dyb3VuZDp0cmFuc3BhcmVudDtmb250LXdlaWdodDo3MDB9Ci5rIGJ1dHRvblthcmlhLXByZXNzZWQ9dHJ1ZV17YmFja2dyb3VuZDp2YXIoLS1saW1lKTtjb2xvcjojMTExfQojbXNne2NvbG9yOnZhcigtLW11KTtmb250LXNpemU6MTRweDttYXJnaW46MH0KPC9zdHlsZT48L2hlYWQ+PGJvZHk+PGRpdiBjbGFzcz0iYyI+CjxoMT5TdGVtYXBwYXJhYXQ8L2gxPgo8ZGl2IGNsYXNzPSJuIj48YiBpZD0ibm90ZSI+4oCTPC9iPjxzcGFuIGlkPSJoeiI+U3BlZWwgZWVuIHRvb248L3NwYW4+PC9kaXY+CjxkaXYgY2xhc3M9Im0iPjxkaXYgaWQ9Im5kIj48L2Rpdj48L2Rpdj48ZGl2IGNsYXNzPSJzYyI+PHNwYW4+4oiSNTA8L3NwYW4+PHNwYW4+dGUgbGFhZyDCtyBjZW50IMK3IHRlIGhvb2c8L3NwYW4+PHNwYW4+KzUwPC9zcGFuPjwvZGl2Pgo8YnV0dG9uIGNsYXNzPSJiIiBpZD0iZ28iPkx1aXN0ZXJlbjwvYnV0dG9uPjxwIGlkPSJtc2ciIGhpZGRlbj48L3A+CjxkaXY+PHAgY2xhc3M9ImwiPkluc3RydW1lbnQgKG5vdGF0aWUpPC9wPjxkaXYgY2xhc3M9InNnIiBpZD0idHIiPjxidXR0b24gZGF0YS12PSIwIj5pbiBDPC9idXR0b24+PGJ1dHRvbiBkYXRhLXY9IjIiPmluIELima08L2J1dHRvbj48YnV0dG9uIGRhdGEtdj0iOSI+aW4gReKZrTwvYnV0dG9uPjxidXR0b24gZGF0YS12PSI3Ij5pbiBGPC9idXR0b24+PC9kaXY+PC9kaXY+CjxkaXY+PHAgY2xhc3M9ImwiPlN0ZW1taW5nIEEgPTwvcD48ZGl2IGNsYXNzPSJzZyIgaWQ9ImEiPjxidXR0b24gZGF0YS12PSI0NDAiPjQ0MDwvYnV0dG9uPjxidXR0b24gZGF0YS12PSI0NDEiPjQ0MTwvYnV0dG9uPjxidXR0b24gZGF0YS12PSI0NDIiPjQ0MjwvYnV0dG9uPjwvZGl2PjwvZGl2Pgo8ZGl2PjxwIGNsYXNzPSJsIj5TdGVtdG9vbiAob2N0YWFmIDQpPC9wPjxkaXYgY2xhc3M9ImsiIGlkPSJrZXlzIj48L2Rpdj48L2Rpdj4KPC9kaXY+PHNjcmlwdD4KY29uc3QgJD1zPT5kb2N1bWVudC5xdWVyeVNlbGVjdG9yKHMpLE49WyJDIiwiQ+KZryIsIkQiLCJF4pmtIiwiRSIsIkYiLCJG4pmvIiwiRyIsIkHima0iLCJBIiwiQuKZrSIsIkIiXTsKbGV0IFQ9e3RyOjAsYTo0NDJ9O3RyeXtPYmplY3QuYXNzaWduKFQsSlNPTi5wYXJzZShsb2NhbFN0b3JhZ2UuZ2V0SXRlbSgic3RlbSIpfHwie30iKSl9Y2F0Y2goZSl7fQpjb25zdCBzdj0oKT0+e3RyeXtsb2NhbFN0b3JhZ2Uuc2V0SXRlbSgic3RlbSIsSlNPTi5zdHJpbmdpZnkoVCkpfWNhdGNoKGUpe319OwpsZXQgYWMsTD17b246ZmFsc2V9LHRvbmU9bnVsbCx0bj0tMSxzbT1udWxsLGxhc3Q9MDsKY29uc3QgY3R4PSgpPT57aWYoIWFjKWFjPW5ldyh3aW5kb3cuQXVkaW9Db250ZXh0fHx3aW5kb3cud2Via2l0QXVkaW9Db250ZXh0KSgpO2lmKGFjLnN0YXRlPT09InN1c3BlbmRlZCIpYWMucmVzdW1lKCk7cmV0dXJuIGFjfTsKZnVuY3Rpb24gc2VnKGlkLHYpe2RvY3VtZW50LnF1ZXJ5U2VsZWN0b3JBbGwoaWQrIiBidXR0b24iKS5mb3JFYWNoKGI9PmIuc2V0QXR0cmlidXRlKCJhcmlhLXByZXNzZWQiLFN0cmluZyhiLmRhdGFzZXQudj09U3RyaW5nKHYpKSkpfQpmdW5jdGlvbiBkcmF3KCl7c2VnKCIjdHIiLFQudHIpO3NlZygiI2EiLFQuYSk7JCgiI2tleXMiKS5pbm5lckhUTUw9Ti5tYXAoKG4saSk9Pic8YnV0dG9uIGRhdGEtbj0iJytpKyciIGFyaWEtcHJlc3NlZD0iJysodG49PT1pKSsnIj4nK24rIjwvYnV0dG9uPiIpLmpvaW4oIiIpOyQoIiNnbyIpLnRleHRDb250ZW50PUwub24/IlN0b3AgbHVpc3RlcmVuIjoiTHVpc3RlcmVuIn0KJCgiI3RyIikub25jbGljaz1lPT57Y29uc3QgYj1lLnRhcmdldC5jbG9zZXN0KCJidXR0b24iKTtpZihiKXtULnRyPStiLmRhdGFzZXQudjtzdigpO2RyYXcoKX19OwokKCIjYSIpLm9uY2xpY2s9ZT0+e2NvbnN0IGI9ZS50YXJnZXQuY2xvc2VzdCgiYnV0dG9uIik7aWYoYil7VC5hPStiLmRhdGFzZXQudjtzdigpO2RyYXcoKX19OwpmdW5jdGlvbiBzdG9wVG9uZSgpe2lmKHRvbmUpe2NvbnN0IHQ9YWMuY3VycmVudFRpbWU7dG9uZS5nLmdhaW4uY2FuY2VsU2NoZWR1bGVkVmFsdWVzKHQpO3RvbmUuZy5nYWluLnNldFZhbHVlQXRUaW1lKHRvbmUuZy5nYWluLnZhbHVlLHQpO3RvbmUuZy5nYWluLmV4cG9uZW50aWFsUmFtcFRvVmFsdWVBdFRpbWUoLjAwMDEsdCsuMTIpO3RvbmUuby5zdG9wKHQrLjE1KTt0b25lPW51bGx9dG49LTF9CiQoIiNrZXlzIikub25jbGljaz1lPT57Y29uc3QgYj1lLnRhcmdldC5jbG9zZXN0KCJidXR0b24iKTtpZighYilyZXR1cm47Y29uc3Qgbj0rYi5kYXRhc2V0Lm47Y29uc3Qgc2FtZT10bj09PW47c3RvcFRvbmUoKTtpZighc2FtZSl7c3RvcEwoKTtjb25zdCBjPWN0eCgpLG89Yy5jcmVhdGVPc2NpbGxhdG9yKCksZz1jLmNyZWF0ZUdhaW4oKTtvLmZyZXF1ZW5jeS52YWx1ZT1ULmEqTWF0aC5wb3coMiwoNjArbi1ULnRyLTY5KS8xMik7Zy5nYWluLnNldFZhbHVlQXRUaW1lKC4wMDAxLGMuY3VycmVudFRpbWUpO2cuZ2Fpbi5leHBvbmVudGlhbFJhbXBUb1ZhbHVlQXRUaW1lKC4yNSxjLmN1cnJlbnRUaW1lKy4wOCk7by5jb25uZWN0KGcpLmNvbm5lY3QoYy5kZXN0aW5hdGlvbik7by5zdGFydCgpO3RvbmU9e28sZ307dG49bn1kcmF3KCl9OwpmdW5jdGlvbiBkZXRlY3QoYnVmLHNyKXtsZXQgbj1idWYubGVuZ3RoLHI9MDtmb3IobGV0IGk9MDtpPG47aSsrKXIrPWJ1ZltpXSpidWZbaV07aWYoTWF0aC5zcXJ0KHIvbik8LjAwOClyZXR1cm4tMTtsZXQgYT0wLGI9bi0xO2ZvcihsZXQgaT0wO2k8bi8yO2krKylpZihNYXRoLmFicyhidWZbaV0pPC4yKXthPWk7YnJlYWt9Zm9yKGxldCBpPTE7aTxuLzI7aSsrKWlmKE1hdGguYWJzKGJ1ZltuLWldKTwuMil7Yj1uLWk7YnJlYWt9Y29uc3QgeD1idWYuc2xpY2UoYSxiKTtuPXgubGVuZ3RoO2lmKG48NjQpcmV0dXJuLTE7Y29uc3QgYz1uZXcgRmxvYXQzMkFycmF5KG4pO2ZvcihsZXQgbD0wO2w8bjtsKyspe2xldCBzPTA7Zm9yKGxldCBpPTA7aTxuLWw7aSsrKXMrPXhbaV0qeFtpK2xdO2NbbF09c31sZXQgZD0wO3doaWxlKGQ8bi0xJiZjW2RdPmNbZCsxXSlkKys7bGV0IG14PS0xLHA9LTE7Zm9yKGxldCBpPWQ7aTxuO2krKylpZihjW2ldPm14KXtteD1jW2ldO3A9aX1pZihwPD0wfHxwPj1uLTF8fG14PGNbMF0qLjUpcmV0dXJuLTE7Y29uc3QgeDE9Y1twLTFdLHgyPWNbcF0seDM9Y1twKzFdLGFhPSh4MSt4My0yKngyKS8yLGJiPSh4My14MSkvMjtyZXR1cm4gc3IvKGFhP3AtYmIvKDIqYWEpOnApfQpmdW5jdGlvbiBsb29wKHQpe2lmKCFMLm9uKXJldHVybjtpZih0LWxhc3Q+NDUpe2xhc3Q9dDtMLmFuLmdldEZsb2F0VGltZURvbWFpbkRhdGEoTC5idWYpO2NvbnN0IGY9ZGV0ZWN0KEwuYnVmLGFjLnNhbXBsZVJhdGUpO2lmKGY+NDAmJmY8MjIwMCl7Y29uc3QgbT02OSsxMipNYXRoLmxvZzIoZi9ULmEpO3NtPXNtPT1udWxsfHxNYXRoLmFicyhtLXNtKT4uNj9tOnNtKi43K20qLjM7Y29uc3QgbnI9TWF0aC5yb3VuZChzbSksY3Q9TWF0aC5yb3VuZCgoc20tbnIpKjEwMCksdz1ucitULnRyOyQoIiNub3RlIikudGV4dENvbnRlbnQ9TlsoKHclMTIpKzEyKSUxMl0rKE1hdGguZmxvb3Iody8xMiktMSk7JCgiI2h6IikudGV4dENvbnRlbnQ9Zi50b0ZpeGVkKDEpKyIgSHogwrcgIisoY3Q+MD8iKyI6IiIpK2N0KyIgY3QiOyQoIiNuZCIpLnN0eWxlLmxlZnQ9KDUwK01hdGgubWF4KC01MCxNYXRoLm1pbig1MCxjdCkpKSsiJSI7JCgiI25kIikuY2xhc3NMaXN0LnRvZ2dsZSgib2siLE1hdGguYWJzKGN0KTw9NCl9fXJlcXVlc3RBbmltYXRpb25GcmFtZShsb29wKX0KZnVuY3Rpb24gc3RvcEwoKXtpZighTC5vbilyZXR1cm47TC5vbj1mYWxzZTtMLnN0LmdldFRyYWNrcygpLmZvckVhY2godD0+dC5zdG9wKCkpOyQoIiNub3RlIikudGV4dENvbnRlbnQ9IuKAkyI7JCgiI2h6IikudGV4dENvbnRlbnQ9IlNwZWVsIGVlbiB0b29uIjskKCIjbmQiKS5zdHlsZS5sZWZ0PSI1MCUifQokKCIjZ28iKS5vbmNsaWNrPWFzeW5jKCk9PntpZihMLm9uKXtzdG9wTCgpO2RyYXcoKTtyZXR1cm59Y29uc3QgbT0kKCIjbXNnIik7bS5oaWRkZW49dHJ1ZTtpZighbmF2aWdhdG9yLm1lZGlhRGV2aWNlc3x8IW5hdmlnYXRvci5tZWRpYURldmljZXMuZ2V0VXNlck1lZGlhKXttLnRleHRDb250ZW50PSJEZXplIGJyb3dzZXIgZ2VlZnQgZ2VlbiB0b2VnYW5nIHRvdCBkZSBtaWNyb2Zvb24uIE9wZW4gaGV0IGJlc3RhbmQgaW4gQ2hyb21lIG9mIFNhZmFyaS4iO20uaGlkZGVuPWZhbHNlO3JldHVybn1zdG9wVG9uZSgpO2N0eCgpO3RyeXtMLnN0PWF3YWl0IG5hdmlnYXRvci5tZWRpYURldmljZXMuZ2V0VXNlck1lZGlhKHthdWRpbzp7ZWNob0NhbmNlbGxhdGlvbjpmYWxzZSxub2lzZVN1cHByZXNzaW9uOmZhbHNlLGF1dG9HYWluQ29udHJvbDpmYWxzZX19KX1jYXRjaChlKXttLnRleHRDb250ZW50PSJHZWVuIHRvZWdhbmcgdG90IGRlIG1pY3JvZm9vbi4gU3RhIGRlIG1pY3JvZm9vbiB0b2UgaW4gamUgYnJvd3NlciBlbiBwcm9iZWVyIG9wbmlldXcuIjttLmhpZGRlbj1mYWxzZTtyZXR1cm59Y29uc3Qgcz1hYy5jcmVhdGVNZWRpYVN0cmVhbVNvdXJjZShMLnN0KTtMLmFuPWFjLmNyZWF0ZUFuYWx5c2VyKCk7TC5hbi5mZnRTaXplPTQwOTY7cy5jb25uZWN0KEwuYW4pO0wuYnVmPW5ldyBGbG9hdDMyQXJyYXkoNDA5Nik7TC5vbj10cnVlO3NtPW51bGw7ZHJhdygpO3JlcXVlc3RBbmltYXRpb25GcmFtZShsb29wKX07CmRvY3VtZW50LmFkZEV2ZW50TGlzdGVuZXIoInZpc2liaWxpdHljaGFuZ2UiLCgpPT57aWYoZG9jdW1lbnQuaGlkZGVuKXtzdG9wTCgpO3N0b3BUb25lKCk7ZHJhdygpfX0pOwpkcmF3KCk7Cjwvc2NyaXB0PjwvYm9keT48L2h0bWw+Cg==";
 let dlNs = null; (async () => { try{ if(window.claude && window.claude.use) dlNs = await window.claude.use("downloads"); }catch(e){} })();
+function esc2(x){ return String(x).replace(/[&<>]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c])); }
 function micBlocked(text){
+  if(!$("#mbar").hidden){ const t = document.createElement("div"); t.textContent = text; $("#toast").appendChild(t); setTimeout(() => t.remove(), 6000); }
   const msg = $("#tkMsg"); msg.textContent = text + (dlNs ? " Download het stemapparaat en open het in Chrome of Safari: daar werkt de microfoon wel." : ""); msg.hidden = false;
   $("#tkDl").hidden = !dlNs;
 }
@@ -1821,19 +1848,19 @@ async function startListen(){
   const src = ac.createMediaStreamSource(L.stream); L.an = ac.createAnalyser(); L.an.fftSize = 4096; src.connect(L.an);
   L.buf = new Float32Array(L.an.fftSize); L.on = true; L.smooth = null; drawTune(); L.raf = requestAnimationFrame(listenLoop);
 }
-function stopListen(){ if(!L.on) return; L.on = false; cancelAnimationFrame(L.raf); if(L.stream) L.stream.getTracks().forEach(t => t.stop()); L.stream = null; $("#tkNote").textContent = "–"; $("#tkHz").textContent = "Speel een toon"; $("#tkNeedle").style.left = "50%"; $("#tkNeedle").classList.remove("ok"); drawTune(); }
+function stopListen(){ if(!L.on) return; L.on = false; cancelAnimationFrame(L.raf); if(L.stream) L.stream.getTracks().forEach(t => t.stop()); L.stream = null; $("#tkNote").textContent = "–"; $("#tkHz").textContent = "Speel een toon"; $("#tkNeedle").style.left = "50%"; $("#tkNeedle").classList.remove("ok"); $("#mbNote").innerHTML = "–<small>&nbsp;</small>"; $("#mbCents").textContent = ""; $("#mbNeedle").style.left = "50%"; $("#mbNeedle").classList.remove("ok"); drawTune(); }
 function detect(buf, sr){
-  let n = buf.length, rms = 0; for(let i = 0; i < n; i++) rms += buf[i] * buf[i]; rms = Math.sqrt(rms / n); if(rms < 0.008) return -1;
-  let a = 0, b = n - 1; const th = 0.2;
-  for(let i = 0; i < n / 2; i++) if(Math.abs(buf[i]) < th){ a = i; break; }
-  for(let i = 1; i < n / 2; i++) if(Math.abs(buf[n - i]) < th){ b = n - i; break; }
-  const x = buf.slice(a, b); n = x.length; if(n < 64) return -1;
-  const c = new Float32Array(n); for(let l = 0; l < n; l++){ let s = 0; for(let i = 0; i < n - l; i++) s += x[i] * x[i + l]; c[l] = s; }
-  let d = 0; while(d < n - 1 && c[d] > c[d + 1]) d++;
-  let mx = -1, p = -1; for(let i = d; i < n; i++) if(c[i] > mx){ mx = c[i]; p = i; }
-  if(p <= 0 || p >= n - 1 || mx < c[0] * 0.5) return -1;
-  const x1 = c[p - 1], x2 = c[p], x3 = c[p + 1], aa = (x1 + x3 - 2 * x2) / 2, bb = (x3 - x1) / 2;
-  return sr / (aa ? p - bb / (2 * aa) : p);
+  const N = Math.min(buf.length, 2048); let rms = 0; for(let i = 0; i < N; i++) rms += buf[i] * buf[i]; rms = Math.sqrt(rms / N); if(rms < 0.003) return -1;
+  const minLag = Math.floor(sr / 1100), maxLag = Math.min(Math.floor(sr / 38), N - 2);
+  const W = N - maxLag; if(W < 128) return -1;
+  const nsdf = new Float32Array(maxLag + 2);
+  for(let l = minLag; l <= maxLag + 1; l++){ let ac = 0, m = 0; for(let i = 0; i < W; i++){ const a = buf[i], b = buf[i + l]; ac += a * b; m += a * a + b * b; } nsdf[l] = m ? 2 * ac / m : 0; }
+  let best = -1, bestV = 0, top = 0; for(let l = minLag; l <= maxLag; l++) if(nsdf[l] > top) top = nsdf[l];
+  if(top < 0.5) return -1;
+  for(let l = minLag + 1; l <= maxLag; l++){ if(nsdf[l] > nsdf[l - 1] && nsdf[l] >= nsdf[l + 1] && nsdf[l] >= top * 0.9){ best = l; bestV = nsdf[l]; break; } }
+  if(best < 0) return -1;
+  const x1 = nsdf[best - 1], x2 = nsdf[best], x3 = nsdf[best + 1], aa = (x1 + x3 - 2 * x2) / 2, bb = (x3 - x1) / 2;
+  return sr / (aa ? best - bb / (2 * aa) : best);
 }
 function listenLoop(t){
   if(!L.on) return;
@@ -1847,6 +1874,8 @@ function listenLoop(t){
       $("#tkNote").textContent = nm(w) + (Math.floor(w / 12) - 1);
       $("#tkHz").textContent = f.toFixed(1) + " Hz · " + (cents > 0 ? "+" : "") + cents + " ct";
       const nd = $("#tkNeedle"); nd.style.left = (50 + Math.max(-50, Math.min(50, cents))) + "%"; nd.classList.toggle("ok", Math.abs(cents) <= 4);
+      const mn = $("#mbNeedle"); mn.style.left = (50 + Math.max(-50, Math.min(50, cents))) + "%"; mn.classList.toggle("ok", Math.abs(cents) <= 4);
+      $("#mbNote").innerHTML = esc2(nm(w)) + "<small>" + (Math.floor(w / 12) - 1) + "</small>"; $("#mbCents").textContent = (cents > 0 ? "+" : "") + cents + " ct";
     }
   }
   L.raf = requestAnimationFrame(listenLoop);
@@ -1871,6 +1900,7 @@ function drawTune(){
   $("#tkOct").textContent = T.oct; seg($("#tkTr"), T.tr); seg($("#tkA"), T.a); seg($("#tkNames"), T.names);
   $("#tkToneHz").textContent = TN.on ? Math.round(toneFreq() * 10) / 10 + " Hz" : "";
   const l = $("#tkListen"); l.textContent = L.on ? "Stop luisteren" : "Luisteren"; l.classList.toggle("primary", L.on);
+  $("#mbMic").classList.toggle("on", L.on); $("#mbMic").setAttribute("aria-label", L.on ? "Stemapparaat stoppen" : "Stemapparaat starten");
   drawPill();
 }
 function drawPill(){
@@ -1890,8 +1920,12 @@ document.addEventListener("click", e => { if(e.target.closest("[data-tk]")) wind
 <script>
 /* ================= offline app (PWA) ================= */
 (function(){
+  const hadCtl = "serviceWorker" in navigator && !!navigator.serviceWorker.controller;
   if("serviceWorker" in navigator){
-    navigator.serviceWorker.register("sw.js").then(reg => {
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => { if(reloaded || !hadCtl) return; reloaded = true; if(document.getElementById("reader").hidden) location.reload(); });
+      setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
       reg.addEventListener("updatefound", () => {
         const w = reg.installing; if(!w) return;
         w.addEventListener("statechange", () => { if(w.state === "installed" && navigator.serviceWorker.controller){
