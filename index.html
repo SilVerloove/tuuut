@@ -375,7 +375,7 @@ body.reading .tk,body.reading .tk-pill{bottom:calc(76px + env(safe-area-inset-bo
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       <span id="addLbl">PDF of ZIP toevoegen</span></button>
     <button class="btn" id="camBtn" type="button" aria-label="Foto nemen"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span class="caml">Foto</span></button>
-    <input id="file" type="file" accept="application/pdf,.pdf,image/*,.zip,application/zip,application/x-zip-compressed" multiple hidden>
+    <input id="file" type="file" accept="application/pdf,.pdf,image/*,.zip,application/zip,application/x-zip-compressed,.musicxml,.mxl,.xml,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml,text/xml,application/xml" multiple hidden>
     <input id="cam" type="file" accept="image/*" capture="environment" hidden>
   </div>
 
@@ -413,6 +413,7 @@ body.reading .tk,body.reading .tk-pill{bottom:calc(76px + env(safe-area-inset-bo
     <div class="rt"><strong id="rTitle"></strong><span id="rSub"></span></div>
     <button class="cb part" id="rPart" type="button" aria-label="Andere partij kiezen" hidden><span id="rPartT"></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
     <button class="pgno" id="rPg" type="button" aria-label="Naar pagina springen"></button>
+    <button class="cb" id="rTr" type="button" aria-label="Transponeren" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v13M7 4 3 8M7 4l4 4M17 20V7M17 20l-4-4M17 20l4-4"/></svg><span class="lbl">Transponeren</span></button>
     <a class="cb" id="rListen" href="#" target="_blank" rel="noopener" aria-label="Beluisteren op YouTube" style="text-decoration:none"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4v16l13-8z"/></svg><span class="lbl">Beluisteren</span></a>
     <button class="cb" id="rRec" type="button" aria-pressed="false" aria-label="Opnemen"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></svg><span class="lbl">Opnemen</span></button>
     <button class="cb" id="rRecs" type="button" aria-label="Opnames" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg><b id="rRecsN"></b></button>
@@ -728,6 +729,9 @@ async function imageToJpeg(f){
 }
 async function imagesToPdf(imgFiles, name){
   const pics = []; for(const f of imgFiles) pics.push(await imageToJpeg(f));
+  return picsToPdf(pics, name);
+}
+function picsToPdf(pics, name){
   const enc = new TextEncoder(); const parts = []; const offs = []; let len = 0;
   const push = x => { const b = typeof x === "string" ? enc.encode(x) : x; parts.push(b); len += b.length; };
   push("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");
@@ -779,7 +783,7 @@ async function inflateRaw(u8){
   const out = new Blob([u8]).stream().pipeThrough(ds);
   return new Uint8Array(await new Response(out).arrayBuffer());
 }
-async function unzip(file){
+async function unzip(file, want){
   const buf = new Uint8Array(await file.arrayBuffer()); const dv = new DataView(buf.buffer);
   let e = -1; for(let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--){ if(dv.getUint32(i, true) === 0x06054b50){ e = i; break; } }
   if(e < 0) throw new Error("nozip");
@@ -794,7 +798,7 @@ async function unzip(file){
     const name = (flag & 0x800) ? dec.decode(nb) : (() => { try{ return new TextDecoder("utf-8", { fatal:true }).decode(nb); }catch(err){ return dec437.decode(nb); } })();
     p += 46 + fl + xl + cl;
     if(/\/$/.test(name) || /(^|\/)__MACOSX\//.test(name) || /(^|\/)\./.test(name)) continue;
-    if(!/\.(pdf|jpe?g|png|webp)$/i.test(name)) continue;
+    if(!(want || /\.(pdf|jpe?g|png|webp)$/i).test(name)) continue;
     const ds = lo + 30 + dv.getUint16(lo + 26, true) + dv.getUint16(lo + 28, true);
     const raw = buf.subarray(ds, ds + csize);
     let data;
@@ -814,13 +818,14 @@ async function expandZips(zips){
   for(const z of zips){
     toast("ZIP openen: " + z.name, 1800);
     let entries;
-    try{ entries = await unzip(z); }
+    try{ entries = await unzip(z, /\.(pdf|jpe?g|png|webp|musicxml|mxl)$/i); }
     catch(e){ toast(z.name + ": " + (e && e.message === "nodecomp" ? "deze browser kan geen ZIP openen. Update Chrome." : "geen geldig ZIP-bestand."), 5000); continue; }
     const groups = {};
     for(const en of entries){
       const base = en.path.split("/").pop(), dir = en.path.slice(0, en.path.length - base.length).replace(/\/$/, "");
       const orch = orchFromPath(z.name + "/" + en.path);
       if(/\.pdf$/i.test(base)){ const f = new File([en.data], base, { type:"application/pdf" }); f._orch = orch; files.push(f); }
+      else if(/\.(musicxml|mxl)$/i.test(base)){ const f = new File([en.data], base, { type:"application/vnd.recordare.musicxml" }); f._orch = orch; files.push(f); }
       else { const key = dir || z.name.replace(/\.zip$/i, ""); (groups[key] = groups[key] || { orch, imgs:[] }).imgs.push(new File([en.data], base, { type:/png$/i.test(base) ? "image/png" : /webp$/i.test(base) ? "image/webp" : "image/jpeg" })); }
     }
     for(const key of Object.keys(groups)){
@@ -844,6 +849,117 @@ function askOrch(n, auto){
     });
   });
 }
+/* ---- MusicXML: render with Verovio, transpose, keep as PDF so reader/annotations stay the same ---- */
+const VRV_SRC = "lib/verovio-toolkit-wasm.js";
+let vrvP = null;
+function loadVerovio(){
+  if(vrvP) return vrvP;
+  vrvP = new Promise((res, rej) => {
+    const done = () => { try{ res(new window.verovio.toolkit()); }catch(e){ rej(e); } };
+    if(window.verovio && window.verovio.toolkit){ if(window.verovio.module.calledRun) done(); else window.verovio.module.onRuntimeInitialized = done; return; }
+    const sc = document.createElement("script"); sc.src = VRV_SRC;
+    sc.onload = () => { const v = window.verovio; if(!v){ rej(new Error("noverovio")); return; } if(v.module.calledRun) done(); else v.module.onRuntimeInitialized = done; };
+    sc.onerror = () => { vrvP = null; rej(new Error("noverovio")); };
+    document.head.appendChild(sc);
+  });
+  vrvP.catch(() => { vrvP = null; });
+  return vrvP;
+}
+const isMx = f => /\.(musicxml|mxl|xml)$/i.test(f.name) || /musicxml/i.test(f.type);
+async function readMusicXml(file){
+  const u = new Uint8Array(await file.arrayBuffer());
+  if(u[0] === 0x50 && u[1] === 0x4b){
+    const ents = await unzip(file, /\.(xml|musicxml)$/i);
+    const cont = ents.find(e => /META-INF\/container\.xml$/i.test(e.path));
+    let root = null;
+    if(cont){ const m = new TextDecoder().decode(cont.data).match(/full-path="([^"]+)"/); if(m) root = ents.find(e => e.path === m[1]); }
+    root = root || ents.find(e => !/META-INF/i.test(e.path));
+    if(!root) throw new Error("nomx");
+    return new TextDecoder().decode(root.data);
+  }
+  return new TextDecoder().decode(u);
+}
+const MXK = [["C", 0], ["B♭", 2], ["E♭", 9], ["F", 7]];
+const MXN = ["P", "m", "M", "m", "M", "P", "A", "P", "m", "M", "m", "M"], MXD = [1, 2, 2, 3, 3, 4, 4, 5, 6, 6, 7, 7];
+function origClef(xml){ const m = xml.match(/<clef[^>]*>[\s\S]*?<sign>\s*([A-Z]+)\s*<\/sign>/); return m ? m[1] : "G"; }
+function mxSemis(o, oc){ const c = o.clef === "G" && oc === "F" ? 12 : o.clef === "F" && oc === "G" ? -12 : 0; return (o.to - o.from) + (o.shift || 0) + 12 * (o.oct || 0) + c; }
+function intervalName(n){ if(!n) return ""; const a = Math.abs(n), r = a % 12, k = Math.floor(a / 12); return (n < 0 ? "-" : "") + MXN[r] + (MXD[r] + 7 * k + (r === 0 ? (k ? 0 : 0) : 0) + (r === 0 && k ? 0 : 0)); }
+function intervalWords(n){
+  if(!n) return "zoals geschreven";
+  const W = ["", "een halve toon", "een toon", "een kleine terts", "een grote terts", "een kwart", "een overmatige kwart", "een kwint", "een kleine sext", "een grote sext", "een kleine septiem", "een grote septiem"];
+  const a = Math.abs(n), r = a % 12, k = Math.floor(a / 12);
+  const t = [r ? W[r] : "", k ? (k === 1 ? "een octaaf" : k + " octaven") : ""].filter(Boolean).join(" + ");
+  return t + (n > 0 ? " hoger" : " lager");
+}
+function applyClef(xml, clef){
+  if(!clef || clef === "keep") return xml;
+  const c = clef === "G" ? "<clef><sign>G</sign><line>2</line></clef>" : "<clef><sign>F</sign><line>4</line></clef>";
+  return xml.replace(/<clef(\s[^>]*)?>[\s\S]*?<\/clef>/g, m => { const num = m.match(/number="(\d+)"/); return num ? c.replace("<clef>", '<clef number="' + num[1] + '">') : c; });
+}
+async function svgToPic(svg){
+  const url = URL.createObjectURL(new Blob([svg], { type:"image/svg+xml" }));
+  try{
+    const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const W = 1754, H = 2480; const c = document.createElement("canvas"); c.width = W; c.height = H;
+    const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, W, H); g.drawImage(im, 0, 0, W, H);
+    const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.92));
+    return { w:W, h:H, bytes:new Uint8Array(await blob.arrayBuffer()) };
+  } finally { URL.revokeObjectURL(url); }
+}
+async function mxToPdf(xml, o, name){
+  const tk = await loadVerovio();
+  const oc = origClef(xml);
+  tk.setOptions({ pageWidth:2100, pageHeight:2970, pageMarginTop:80, pageMarginBottom:80, pageMarginLeft:90, pageMarginRight:90, scale:85, adjustPageHeight:false, footer:"none", breaks:"auto", transpose:intervalName(mxSemis(o, oc)) });
+  if(!tk.loadData(applyClef(xml, o.clef))) throw new Error("badmx");
+  const n = tk.getPageCount(); if(!n) throw new Error("badmx");
+  const pics = []; for(let p = 1; p <= n; p++) pics.push(await svgToPic(tk.renderToSVG(p)));
+  return picsToPdf(pics, name);
+}
+function mxLabel(o, oc){ const k = MXK.find(x => x[1] === o.to); const cl = o.clef === "G" ? "solsleutel" : o.clef === "F" ? "bassleutel" : ""; const n = mxSemis(o, oc); return n || o.clef !== "keep" ? ["in " + (k ? k[0] : "C"), cl].filter(Boolean).join(", ") + (o.shift ? " · " + intervalWords(o.shift) : "") : ""; }
+function mxSheet(s){
+  const o = Object.assign({ from:0, to:0, clef:"keep", shift:0, oct:0 }, s.mx.o || {});
+  sheet('<h2>Transponeren</h2>' +
+    '<div class="field">Partij is geschreven voor<div class="pick" id="xF">' + MXK.map(k => '<label><input type="radio" name="xf" value="' + k[1] + '"' + (o.from === k[1] ? " checked" : "") + ">" + k[0] + "</label>").join("") + "</div></div>" +
+    '<div class="field">Omzetten voor instrument in<div class="pick" id="xT">' + MXK.map(k => '<label><input type="radio" name="xt" value="' + k[1] + '"' + (o.to === k[1] ? " checked" : "") + ">" + k[0] + "</label>").join("") + "</div></div>" +
+    '<div class="field">Sleutel<div class="pick" id="xC">' + [["keep", "Zoals origineel"], ["F", "Bassleutel"], ["G", "Solsleutel"]].map(k => '<label><input type="radio" name="xc" value="' + k[0] + '"' + (o.clef === k[0] ? " checked" : "") + ">" + k[1] + "</label>").join("") + "</div></div>" +
+    '<div class="row"><div class="field">Extra hoger / lager<div class="pick"><button class="btn sm" type="button" data-sh="-2">− toon</button><button class="btn sm" type="button" data-sh="-1">− ½</button><button class="btn sm" type="button" data-sh="1">+ ½</button><button class="btn sm" type="button" data-sh="2">+ toon</button></div></div>' +
+    '<div class="field">Octaaf<div class="pick"><button class="btn sm" type="button" data-oc="-1">− octaaf</button><button class="btn sm" type="button" data-oc="1">+ octaaf</button></div></div></div>' +
+    '<p class="hint" id="xSum"></p><p class="hint">Aantekeningen blijven op dezelfde plek staan; kijk ze na als de noten verschuiven.</p>' +
+    '<div class="acts"><button class="btn ghost spacer" type="button" id="xR">Origineel</button><button class="btn ghost" type="button" id="xX">Annuleren</button><button class="btn primary" type="button" id="xOk">Toepassen</button></div>',
+    (sh, close) => {
+      const oc = s.mx.clef0 || "G";
+      const read = () => { o.from = +$("#xF input:checked", sh).value; o.to = +$("#xT input:checked", sh).value; o.clef = $("#xC input:checked", sh).value; };
+      const sum = () => { read(); $("#xSum", sh).textContent = "Resultaat: alle noten " + intervalWords(mxSemis(o, oc)) + (o.shift ? " (waarvan extra " + intervalWords(o.shift) + ")" : "") + (o.oct ? ", " + (o.oct > 0 ? "+" : "") + o.oct + " octaaf" : "") + "."; };
+      sh.addEventListener("change", sum);
+      $$("[data-sh]", sh).forEach(b => b.onclick = () => { o.shift = Math.max(-12, Math.min(12, (o.shift || 0) + +b.dataset.sh)); sum(); });
+      $$("[data-oc]", sh).forEach(b => b.onclick = () => { o.oct = Math.max(-2, Math.min(2, (o.oct || 0) + +b.dataset.oc)); sum(); });
+      $("#xR", sh).onclick = () => { $("#xF input[value='0']", sh).checked = true; $("#xT input[value='0']", sh).checked = true; $("#xC input[value='keep']", sh).checked = true; o.shift = 0; o.oct = 0; sum(); };
+      $("#xX", sh).onclick = close;
+      $("#xOk", sh).onclick = async () => { read(); close(); await retranspose(s, Object.assign({}, o)); };
+      sum();
+    });
+}
+async function retranspose(s, o){
+  const xml = await IDB.get("files", s.mx.xml);
+  if(!xml){ toast("De bewerkbare noten van dit stuk staan niet op dit toestel. Voeg het MusicXML-bestand hier opnieuw toe.", 6000); return; }
+  toast("Transponeren…", 2500);
+  try{
+    const file = await mxToPdf(xml, o, s.title);
+    const buf = await file.arrayBuffer();
+    const doc = await openPdf(buf); const pages = doc.numPages; const thumb = await renderThumb(doc); doc.destroy();
+    const fields = { mx:Object.assign({}, s.mx, { o }), pages, hash:await hashBuf(buf), mxLabel:mxLabel(o, s.mx.clef0) };
+    if(s.assetId && Store.assets){
+      const up = await Store.assets.upload(file, { type:"application/pdf" });
+      const old = s.assetId; fields.assetId = up.id; await IDB.put("files", up.id, buf);
+      await IDB.put("thumbs", "t_" + s.id + "_" + up.id, thumb);
+      try{ await Store.assets.delete(old); }catch(e){} IDB.del("files", old);
+    } else { await IDB.put("files", fileKey(s), buf); await IDB.put("thumbs", "t_" + s.id + "_" + fileKey(s), thumb); }
+    await Store.patch("scores", s.id, fields);
+    if(!reader.hidden && R.score && R.score.id === s.id){ R.cache.clear(); R.trim = {}; await loadScore(R.idx, Math.min(R.page, pages)); }
+    toast(fields.mxLabel ? "Getransponeerd: " + fields.mxLabel + "." : "Terug naar het origineel.");
+  }catch(e){ toast(e && e.message === "noverovio" ? "Het transponeerprogramma kon niet laden. Probeer opnieuw met internet." : "Transponeren lukte niet.", 6000); }
+}
+
 /* ---- duplicates: same PDF content = same fingerprint ---- */
 async function hashBuf(buf){
   try{ if(crypto && crypto.subtle){ const d = await crypto.subtle.digest("SHA-256", buf); return Array.from(new Uint8Array(d), b => b.toString(16).padStart(2, "0")).join(""); } }catch(e){}
@@ -895,13 +1011,25 @@ async function importFiles(list){
   let all = Array.from(list);
   const zips = all.filter(f => /\.zip$/i.test(f.name) || /zip/i.test(f.type));
   if(zips.length){ all = all.filter(f => !zips.includes(f)).concat(await expandZips(zips)); }
+  const mxs = all.filter(isMx);
+  if(mxs.length){
+    all = all.filter(f => !mxs.includes(f));
+    for(const m of mxs){
+      try{
+        toast("Noten zetten: " + m.name, 2500);
+        const xml = await readMusicXml(m);
+        const pf = await mxToPdf(xml, { from:0, to:0, clef:"keep", shift:0, oct:0 }, m.name.replace(/\.(musicxml|mxl|xml)$/i, ""));
+        pf._mx = xml; pf._orch = m._orch; all.push(pf);
+      }catch(e){ toast(m.name + ": " + (e && e.message === "noverovio" ? "het notenprogramma kon niet laden (internet nodig de eerste keer)." : "geen geldig MusicXML-bestand."), 6000); }
+    }
+  }
   const files = all.filter(f => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name));
   const imgs = all.filter(f => !files.includes(f) && (/^image\//i.test(f.type) || /\.(jpe?g|png|heic|webp)$/i.test(f.name)));
   if(imgs.length){
     try{ imgs.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric:true })); files.push(await imagesToPdf(imgs, imgs.length === 1 ? imgs[0].name : "Foto's")); }
     catch(e){ toast("Foto kon niet worden omgezet.", 4000); }
   }
-  if(!files.length){ toast("Kies PDF-bestanden, foto's of een ZIP."); return; }
+  if(!files.length){ toast("Kies PDF-bestanden, foto's, MusicXML of een ZIP."); return; }
   if(!pdfjs){ toast("De PDF-lezer kon niet laden. Controleer je internet en herlaad."); return; }
   const loose = files.filter(f => !f._orch);
   if(loose.length && !(S.filter !== "all" && S.orchestras[S.filter]) && orchList().length){
@@ -926,6 +1054,7 @@ async function importFiles(list){
       const doc = await openPdf(buf); const pages = doc.numPages; const thumb = await renderThumb(doc); doc.destroy();
       const id = uid("s");
       const rec = { title:niceName(f.name), composer:"", part:"", orchestras: f._orch ? [f._orch] : S.filter !== "all" && S.orchestras[S.filter] ? [S.filter] : [], pages, addedAt:Date.now(), lastOpened:0, hash:h };
+      if(f._mx){ rec.mx = { xml:"mx_" + id, clef0:origClef(f._mx), o:{ from:0, to:0, clef:"keep", shift:0, oct:0 } }; await IDB.put("files", "mx_" + id, f._mx); }
       if(S.mode === "cloud"){
         let up;
         try{ up = await Store.assets.upload(f, { type:"application/pdf" }); }
@@ -1062,6 +1191,7 @@ function drawLib(){
           '<span class="t">' + esc(s._n > 1 ? partInfo(s).base : s.title) + "</span>" +
           '<span class="m">' + esc((s._n > 1 ? [partInfo(s).part, s.composer] : [s.part, s.composer]).filter(Boolean).join(" · ") || " ") + "</span>" +
           (s._n > 1 ? '<span class="partn">' + s._n + " partijen</span>" : "") +
+          (s.mxLabel ? '<span class="partn">' + esc(s.mxLabel) + "</span>" : "") +
         "</button>" +
         '<div class="tags">' + orchTags(s.orchestras) + "</div>" +
         '<a class="listen' + (s.link ? "" : " nolink") + '" href="' + esc(listenUrl(s)) + '" target="_blank" rel="noopener" title="' + (s.link ? "Beluisteren op YouTube" : "Zoeken op YouTube") + '">' + ICON.play + (s.link ? " Beluisteren" : " Zoek op YouTube") + "</a>" +
@@ -1284,6 +1414,8 @@ async function loadScore(idx, page){
   $("#rTitle").textContent = R.score.title;
   $("#rSub").textContent = [R.score.part, R.score.composer, (R.score.orchestras || []).filter(o => S.orchestras[o]).map(o => S.orchestras[o].name).join(", ")].filter(Boolean).join(" · ");
   $("#rListen").href = listenUrl(R.score);
+  $("#rTr").hidden = !R.score.mx || S.readOnly;
+  if(R.score.mxLabel) $("#rSub").textContent = [R.score.mxLabel, $("#rSub").textContent].filter(Boolean).join(" · ");
   { const sib = partInfo(R.score).part ? siblings(R.score) : []; $("#rPart").hidden = sib.length < 2; $("#rPartT").textContent = partInfo(R.score).part; if(sib.length > 1) $("#rTitle").textContent = partInfo(R.score).base; }
   updateSetbar(); recCount();
   try{
@@ -1507,6 +1639,7 @@ $("#rFull").onclick = () => goFull(!document.fullscreenElement);
 $("#rView").onclick = () => { const was = !$("#pop").hidden; closePops(); const p = $("#pop"); p.hidden = was; $("#rView").setAttribute("aria-pressed", String(!p.hidden)); wakeInfo(); showChrome(0); };
 function closePops(){ ["#pop","#jump","#recpop","#partpop"].forEach(s => $(s).hidden = true); $("#rView").setAttribute("aria-pressed", "false"); }
 function drawJump(){ const n = R.doc ? R.doc.numPages : 1; const r = $("#jumpR"); r.max = n; r.value = R.page; $("#jumpN").textContent = R.page + " / " + n; }
+$("#rTr").onclick = () => { if(R.score && R.score.mx){ closePops(); mxSheet(S.scores[R.score.id] || R.score); } };
 $("#rPart").onclick = () => {
   const was = !$("#partpop").hidden; closePops();
   if(!was && R.score){

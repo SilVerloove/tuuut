@@ -1,6 +1,6 @@
 /* TUUUT service worker: everything cached on the device so the app opens without internet */
-const VERSION = "tuuut-v7";
-const FILES = ["./", "index.html", "manifest.webmanifest", "lib/pdf.min.js", "lib/pdf.worker.min.js", "voorbeeld-ode.pdf",
+const VERSION = "tuuut-v8";
+const FILES = ["./", "index.html", "manifest.webmanifest", "lib/pdf.min.js", "lib/pdf.worker.min.js", "lib/verovio-toolkit-wasm.js", "voorbeeld-ode.pdf",
   "icon-192.png", "icon-512.png", "icon-maskable-512.png",
   "fonts/unbounded-latin-500-normal.woff2", "fonts/unbounded-latin-700-normal.woff2", "fonts/unbounded-latin-800-normal.woff2",
   "fonts/atkinson-hyperlegible-latin-400-normal.woff2", "fonts/atkinson-hyperlegible-latin-700-normal.woff2", "fonts/atkinson-hyperlegible-latin-400-italic.woff2"];
