@@ -157,6 +157,8 @@ body.drag #lib{outline:3px dashed var(--brass-fill);outline-offset:-8px}
 .pg{position:relative;background:#fff;flex:none;box-shadow:0 0 0 1px rgba(255,255,255,.04)}
 .pg{overflow:hidden}
 .pg .pin{position:absolute}
+.halfline{position:absolute;left:0;right:0;height:0;border-top:2px dashed rgba(198,244,50,.9);z-index:3;pointer-events:none}
+.halfline span{position:absolute;right:6px;top:-22px;font:700 11px var(--body);color:#111;background:#C6F432;padding:2px 7px;border-radius:999px}
 .pg canvas{position:absolute;left:0;top:0;width:100%;height:100%}
 button.pgno{background:transparent;border:1px solid var(--chrome-line);border-radius:10px;min-height:44px;font-weight:700}
 .cb.recon{background:#D32F2F;border-color:#D32F2F;color:#fff}
@@ -375,7 +377,7 @@ body.reading .tk,body.reading .tk-pill{bottom:calc(76px + env(safe-area-inset-bo
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       <span id="addLbl">PDF of ZIP toevoegen</span></button>
     <button class="btn" id="camBtn" type="button" aria-label="Foto nemen"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span class="caml">Foto</span></button>
-    <input id="file" type="file" accept="application/pdf,.pdf,image/*,.zip,application/zip,application/x-zip-compressed,.musicxml,.mxl,.xml,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml,text/xml,application/xml" multiple hidden>
+    <input id="file" type="file" accept="application/pdf,.pdf,image/*,.json,application/json,.zip,application/zip,application/x-zip-compressed,.musicxml,.mxl,.xml,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml,text/xml,application/xml" multiple hidden>
     <input id="cam" type="file" accept="image/*" capture="environment" hidden>
   </div>
 
@@ -432,6 +434,7 @@ body.reading .tk,body.reading .tk-pill{bottom:calc(76px + env(safe-area-inset-bo
     <h3>Papier</h3>
     <div class="seg" data-set="paper"><button data-v="white" type="button">Wit</button><button data-v="warm" type="button">Warm</button><button data-v="night" type="button">Nacht</button></div>
     <label class="tog">Witte marges wegsnijden (grotere noten)<input type="checkbox" id="optTrim"></label>
+    <label class="tog">Halve pagina omslaan (onderste helft blijft staan)<input type="checkbox" id="optHalf"></label>
     <label class="tog">Alleen de pen tekent, vinger slaat om<input type="checkbox" id="optPen"></label>
     <label class="tog">Volledig scherm bij openen<input type="checkbox" id="optFull"></label>
     <button class="cb" id="showZones" type="button" style="width:100%">Toon tikzones</button>
@@ -569,7 +572,8 @@ const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(
 const DPR = () => Math.min(window.devicePixelRatio || 1, 3);
 function toast(msg, ms){ const d = document.createElement("div"); d.textContent = msg; $("#toast").appendChild(d); setTimeout(() => d.remove(), ms || 3200); }
 function ls(k, v){ try{ if(v === undefined){ const x = localStorage.getItem("lsn_" + k); return x == null ? null : JSON.parse(x); } localStorage.setItem("lsn_" + k, JSON.stringify(v)); }catch(e){ return null; } }
-function ytSearch(s){ return "https://www.youtube.com/results?search_query=" + encodeURIComponent([s.title, s.composer].filter(Boolean).join(" ")); }
+function ytBase(s){ const t = s.group || (s.part && s.title ? s.title.replace(new RegExp("[\\s–—-]*" + s.part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*$", "i"), "") : s.title) || ""; return t.replace(/\s*[–—-]\s*((\d|bas|bass)\b.*|trom.*|trb.*|tpt.*|trump.*|alt.*|ten.*|bari.*|piano|drums|guitar)$/i, ""); }
+function ytSearch(s){ return "https://www.youtube.com/results?search_query=" + encodeURIComponent([ytBase(s), s.arr ? "arr. " + s.arr : s.composer].filter(Boolean).join(" ")); }
 function listenUrl(s){ const l = (s.link || "").trim(); return /^https?:\/\//i.test(l) ? l : ytSearch(s); }
 const PALETTE = ["#C2410C","#1D4ED8","#047857","#7C3AED","#B45309","#BE185D","#0E7490","#4D5563"];
 const ICON = {
@@ -818,13 +822,14 @@ async function expandZips(zips){
   for(const z of zips){
     toast("ZIP openen: " + z.name, 1800);
     let entries;
-    try{ entries = await unzip(z, /\.(pdf|jpe?g|png|webp|musicxml|mxl)$/i); }
+    try{ entries = await unzip(z, /\.(pdf|jpe?g|png|webp|musicxml|mxl|json)$/i); }
     catch(e){ toast(z.name + ": " + (e && e.message === "nodecomp" ? "deze browser kan geen ZIP openen. Update Chrome." : "geen geldig ZIP-bestand."), 5000); continue; }
     const groups = {};
     for(const en of entries){
       const base = en.path.split("/").pop(), dir = en.path.slice(0, en.path.length - base.length).replace(/\/$/, "");
       const orch = orchFromPath(z.name + "/" + en.path);
       if(/\.pdf$/i.test(base)){ const f = new File([en.data], base, { type:"application/pdf" }); f._orch = orch; files.push(f); }
+      else if(/\.json$/i.test(base)){ files.push(new File([en.data], base, { type:"application/json" })); }
       else if(/\.(musicxml|mxl)$/i.test(base)){ const f = new File([en.data], base, { type:"application/vnd.recordare.musicxml" }); f._orch = orch; files.push(f); }
       else { const key = dir || z.name.replace(/\.zip$/i, ""); (groups[key] = groups[key] || { orch, imgs:[] }).imgs.push(new File([en.data], base, { type:/png$/i.test(base) ? "image/png" : /webp$/i.test(base) ? "image/webp" : "image/jpeg" })); }
     }
@@ -960,6 +965,32 @@ async function retranspose(s, o){
   }catch(e){ toast(e && e.message === "noverovio" ? "Het transponeerprogramma kon niet laden. Probeer opnieuw met internet." : "Transponeren lukte niet.", 6000); }
 }
 
+/* ---- arranger: read from the first page when the PDF has text; a tuuut.json in a ZIP can set arranger/link per piece ---- */
+async function pdfCredits(doc){
+  try{
+    const pg = await doc.getPage(1); const tc = await pg.getTextContent();
+    const t = tc.items.map(i => i.str).join(" ").replace(/\s+/g, " ");
+    const a = t.match(/\b(?:arranged\s+by|arrangement\s*(?:by|:)?|arr(?:anged)?\.?\s*(?:by|:)?)\s*:?\s*([A-ZÀ-Ý][A-Za-zÀ-ÿ.'’\-]+(?:\s+(?:[A-ZÀ-Ý][A-Za-zÀ-ÿ.'’\-]+|van|de|der|den))(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ.'’\-]+)?)/i);
+    const c = t.match(/\b(?:music\s+by|composed\s+by|words\s+and\s+music\s+by|by)\s+([A-ZÀ-Ý][A-Za-zÀ-ÿ.'’\-]+(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ.'’\-]+){1,2})/);
+    const STOP = /^(copyright|trb|trombone|in|the|for|and|by|score|part|music|words|international|all|rights|reserved|inc|publishing|hal|leonard)$/i;
+    const fix0 = x => { if(!x) return ""; const w = []; for(const y of x.trim().split(/\s+/)){ if(STOP.test(y.replace(/[.,]/g, ""))) break; w.push(y); } return w.length >= 2 && w.length <= 3 ? w.join(" ") : ""; };
+    const fix = x => (x = fix0(x)) ? x.replace(/\s+(Trombone|Trumpet|Alto|Tenor|Piano|Bass|Drums|Guitar)\b.*$/i, "").toLowerCase().replace(/(^|[\s\-'’.])\p{L}/gu, m => m.toUpperCase()) : "";
+    return { arr:fix(a && a[1]), composer:fix(c && c[1]) };
+  }catch(e){ return {}; }
+}
+const normT = t => (t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+async function applyInfo(info){
+  const pieces = (info && info.pieces) || {}; let n = 0;
+  const keys = {}; Object.keys(pieces).forEach(k => keys[normT(k)] = pieces[k]);
+  for(const x of Object.values(S.scores)){
+    const p = keys[normT(partInfo(x).base)] || keys[normT(x.title)];
+    if(!p) continue;
+    const f = {}; ["arr", "composer", "link"].forEach(k => { const v = p[k === "arr" ? "arranger" : k] || ""; if((v || k === "arr") && v !== (x[k] || "")) f[k] = v; });
+    if(Object.keys(f).length){ await Store.patch("scores", x.id, f); n++; }
+  }
+  return n;
+}
+
 /* ---- duplicates: same PDF content = same fingerprint ---- */
 async function hashBuf(buf){
   try{ if(crypto && crypto.subtle){ const d = await crypto.subtle.digest("SHA-256", buf); return Array.from(new Uint8Array(d), b => b.toString(16).padStart(2, "0")).join(""); } }catch(e){}
@@ -1006,11 +1037,19 @@ function dupSheet(){
       };
     });
 }
+const pendingInfo = [];
 async function importFiles(list){
+  pendingInfo.length = 0;
   if(S.readOnly){ toast("Je kan hier alleen lezen."); return; }
   let all = Array.from(list);
   const zips = all.filter(f => /\.zip$/i.test(f.name) || /zip/i.test(f.type));
   if(zips.length){ all = all.filter(f => !zips.includes(f)).concat(await expandZips(zips)); }
+  const infos = all.filter(f => /\.json$/i.test(f.name));
+  if(infos.length){
+    all = all.filter(f => !infos.includes(f));
+    for(const j of infos){ try{ const n = await applyInfo(JSON.parse(await j.text())); pendingInfo.push(JSON.parse(await j.text())); if(n){ renderLib(); toast("Arrangeur en luisterlink bijgewerkt bij " + n + (n === 1 ? " partij." : " partijen."), 4000); } }catch(e){ toast(j.name + ": geen geldig infobestand.", 4000); } }
+    if(!all.length){ pendingInfo.length = 0; return; }
+  }
   const mxs = all.filter(isMx);
   if(mxs.length){
     all = all.filter(f => !mxs.includes(f));
@@ -1051,9 +1090,10 @@ async function importFiles(list){
         continue;
       }
       toast("Toevoegen: " + f.name, 1800);
-      const doc = await openPdf(buf); const pages = doc.numPages; const thumb = await renderThumb(doc); doc.destroy();
+      const doc = await openPdf(buf); const pages = doc.numPages; const thumb = await renderThumb(doc);
+      const credits = await pdfCredits(doc); doc.destroy();
       const id = uid("s");
-      const rec = { title:niceName(f.name), composer:"", part:"", orchestras: f._orch ? [f._orch] : S.filter !== "all" && S.orchestras[S.filter] ? [S.filter] : [], pages, addedAt:Date.now(), lastOpened:0, hash:h };
+      const rec = { title:niceName(f.name), composer:credits.composer || "", arr:credits.arr || "", part:"", orchestras: f._orch ? [f._orch] : S.filter !== "all" && S.orchestras[S.filter] ? [S.filter] : [], pages, addedAt:Date.now(), lastOpened:0, hash:h };
       if(f._mx){ rec.mx = { xml:"mx_" + id, clef0:origClef(f._mx), o:{ from:0, to:0, clef:"keep", shift:0, oct:0 } }; await IDB.put("files", "mx_" + id, f._mx); }
       if(S.mode === "cloud"){
         let up;
@@ -1068,6 +1108,7 @@ async function importFiles(list){
       toast(f.name + ": " + (code === "too_large" ? "groter dan 20 MB." : code === "quota_or_state" ? "opslag is vol." : code === "rate_limited" ? "even wachten en opnieuw proberen." : "kon niet worden toegevoegd."), 5000);
     }
   }
+  if(pendingInfo.length){ let n = 0; for(const i of pendingInfo.splice(0)) n += await applyInfo(i); if(n) renderLib(); }
   if(ok || dup) toast([ok ? (ok === 1 ? "1 partituur toegevoegd" : ok + " partituren toegevoegd") : "", dup ? (dup === 1 ? "1 stond er al (overgeslagen)" : dup + " stonden er al (overgeslagen)") : ""].filter(Boolean).join(" · ") + ".", 4500);
 }
 
@@ -1189,7 +1230,7 @@ function drawLib(){
         '<button class="open" type="button" data-act="open">' +
           '<div class="thumb"><img alt="" draggable="false" hidden><div class="ph">𝄢</div>' + (s.example ? '<span class="badge">Voorbeeld</span>' : "") + '<span class="pages">' + (s.pages || "?") + " p.</span></div>" +
           '<span class="t">' + esc(s._n > 1 ? partInfo(s).base : s.title) + "</span>" +
-          '<span class="m">' + esc((s._n > 1 ? [partInfo(s).part, s.composer] : [s.part, s.composer]).filter(Boolean).join(" · ") || " ") + "</span>" +
+          '<span class="m">' + esc((s._n > 1 ? [partInfo(s).part, s.arr ? "arr. " + s.arr : s.composer] : [s.part, s.arr ? "arr. " + s.arr : s.composer]).filter(Boolean).join(" · ") || " ") + "</span>" +
           (s._n > 1 ? '<span class="partn">' + s._n + " partijen</span>" : "") +
           (s.mxLabel ? '<span class="partn">' + esc(s.mxLabel) + "</span>" : "") +
         "</button>" +
@@ -1277,20 +1318,24 @@ function scoreSheet(s){
   sheet(
     "<h2>Partituur bewerken</h2>" +
     '<label class="field">Titel<input id="fT" value="' + esc(s.title) + '"></label>' +
-    '<div class="row"><label class="field">Componist / arrangeur<input id="fC" value="' + esc(s.composer) + '"></label><label class="field">Partij<input id="fP" placeholder="bv. Trombone 1" value="' + esc(s.part) + '"></label></div>' +
+    '<div class="row"><label class="field">Componist<input id="fC" value="' + esc(s.composer) + '"></label><label class="field">Arrangeur<input id="fA" placeholder="bv. Mark Taylor" value="' + esc(s.arr || "") + '"></label></div><div class="row"><label class="field">Partij<input id="fP" placeholder="bv. Trombone 1" value="' + esc(s.part) + '"></label></div>' +
     '<label class="field">Hoort bij stuk (voor meerdere partijen van hetzelfde nummer)<input id="fG" list="fGl" placeholder="leeg = apart stuk" value="' + esc(s.group || (partInfo(s).part && siblings(s).length > 1 ? partInfo(s).base : "")) + '"><datalist id="fGl">' + pieceNames().map(n => '<option value="' + esc(n) + '">').join("") + "</datalist></label>" +
     '<label class="field">Link om te beluisteren (YouTube)<input id="fL" type="url" inputmode="url" placeholder="https://www.youtube.com/watch?v=…" value="' + esc(s.link || "") + '"></label>' +
-    '<p class="hint" style="margin-top:-8px"><a href="' + esc(ytSearch(s)) + '" target="_blank" rel="noopener" id="fYt">Zoek dit stuk op YouTube</a> en plak de link van de opname hierboven.</p>' +
+    '<p class="hint" style="margin-top:-8px"><a href="' + esc(ytSearch(s)) + '" target="_blank" rel="noopener" id="fYt">Zoek dit arrangement op YouTube</a> (titel + arrangeur) en plak de link van de juiste opname hierboven. Geldt voor alle partijen van het stuk.</p>' +
     '<div class="field">Orkesten<div class="pick">' + (orchs.length ? orchs.map(o => '<label><input type="checkbox" value="' + esc(o.id) + '"' + ((s.orchestras || []).includes(o.id) ? " checked" : "") + '><i class="dot" style="width:10px;height:10px;border-radius:50%;background:' + esc(o.color) + '"></i>' + esc(o.name) + "</label>").join("") : '<span class="hint">Maak eerst een orkest aan met + Orkest.</span>') + "</div></div>" +
     (sets.length ? '<label class="field">Toevoegen aan programma<select id="fS"><option value="">Geen</option>' + sets.map(l => '<option value="' + esc(l.id) + '"' + ((l.items || []).includes(s.id) ? " disabled" : "") + ">" + esc(l.name) + ((l.items || []).includes(s.id) ? " (staat er al in)" : "") + "</option>").join("") + "</select></label>" : "") +
     '<div class="acts"><button class="btn ghost danger spacer" type="button" id="fDel">Verwijderen</button><button class="btn ghost" type="button" id="fX">Annuleren</button><button class="btn primary" type="button" id="fOk">Opslaan</button></div>',
     (sh, close) => {
       $("#fX", sh).onclick = close;
+      const upd = () => { $("#fYt", sh).href = ytSearch({ title:$("#fT", sh).value, part:$("#fP", sh).value, group:$("#fG", sh).value, arr:$("#fA", sh).value, composer:$("#fC", sh).value }); };
+      ["#fT","#fA","#fC","#fP","#fG"].forEach(k => $(k, sh).addEventListener("input", upd));
       $("#fOk", sh).onclick = async () => {
-        const fields = { title:$("#fT", sh).value.trim() || s.title, composer:$("#fC", sh).value.trim(), part:$("#fP", sh).value.trim(), link:$("#fL", sh).value.trim(), orchestras:$$(".pick input:checked", sh).map(i => i.value), group:$("#fG", sh).value.trim() };
+        const fields = { title:$("#fT", sh).value.trim() || s.title, composer:$("#fC", sh).value.trim(), arr:$("#fA", sh).value.trim(), part:$("#fP", sh).value.trim(), link:$("#fL", sh).value.trim(), orchestras:$$(".pick input:checked", sh).map(i => i.value), group:$("#fG", sh).value.trim() };
         if(fields.group && !fields.part) fields.part = partInfo(s).part || fields.title;
         const rec = Object.assign({}, s, fields); delete rec._n; if(!rec.group) delete rec.group;
         await Store.put("scores", s.id, rec);
+        for(const x of siblings(rec)) if(x.id !== s.id && (x.arr !== rec.arr || x.link !== rec.link || x.composer !== rec.composer)) await Store.patch("scores", x.id, { arr:rec.arr, link:rec.link, composer:rec.composer });
+        $("#fA", sh).oninput = null;
         const fs = $("#fS", sh); if(fs && fs.value){ const l = S.setlists[fs.value]; await Store.put("setlists", l.id, Object.assign({}, l, { items:(l.items || []).concat(s.id) })); }
         close(); toast("Opgeslagen.");
       };
@@ -1408,7 +1453,7 @@ function closeReader(){
 async function loadScore(idx, page){
   const tok = ++R.token;
   Object.keys(R.saveT).forEach(k => { clearTimeout(R.saveT[k]); flushMarks(+k); });
-  R.idx = idx; R.score = S.scores[R.ids[idx]]; R.sizes = {}; R.trim = {}; $("#jump").hidden = true; $("#recpop").hidden = true; $("#partpop").hidden = true; R.cache.clear(); R.marks = {}; R.undo = []; R.redo = []; R.saveT = {};
+  R.idx = idx; R.score = S.scores[R.ids[idx]]; R.sizes = {}; R.trim = {}; R.half = false; $("#jump").hidden = true; $("#recpop").hidden = true; $("#partpop").hidden = true; R.cache.clear(); R.marks = {}; R.undo = []; R.redo = []; R.saveT = {};
   if(R.doc){ R.doc.destroy(); R.doc = null; }
   pagesEl.innerHTML = ""; $("#loading").hidden = false; $("#loading").textContent = "Partituur laden…";
   $("#rTitle").textContent = R.score.title;
@@ -1441,8 +1486,35 @@ async function pageSize(p){
   if(!R.sizes[p]){ const pg = await R.doc.getPage(p); const v = pg.getViewport({ scale:1 }); R.sizes[p] = { w:v.width, h:v.height }; }
   return R.sizes[p];
 }
+function halfOk(){ return !!SET.half && SET.fit !== "width" && perView() === 1 && R.doc && R.page < R.doc.numPages; }
+async function renderHalf(){
+  const tok = R.token, p = R.page, q = p + 1;
+  const [sp, sq] = await Promise.all([pageSize(p), pageSize(q)]); const [bp, bq] = await Promise.all([trimBox(p), trimBox(q)]); if(tok !== R.token) return;
+  const W = stage.clientWidth, H = stage.clientHeight;
+  const ew = sp.w * (bp[2] - bp[0]), eh = sp.h * (bp[3] - bp[1]);
+  const scale = Math.min(W / ew, H / eh);
+  const Wc = Math.floor(ew * scale), Hc = Math.floor(eh * scale), cut = Math.round(Hc / 2);
+  const d = document.createElement("div"); d.className = "pg"; d.style.width = Wc + "px"; d.style.height = Hc + "px"; d.dataset.p = p;
+  const views = [];
+  [[q, sq, bq, "top"], [p, sp, bp, "bottom"]].forEach(([pp, sz, b, part]) => {
+    const cw = Math.floor(sz.w * scale), ch = Math.floor(sz.h * scale), offX = Math.round(b[0] * cw), offY = Math.round(b[1] * ch);
+    const pin = document.createElement("div"); pin.className = "pin";
+    pin.style.cssText = "left:" + (-offX) + "px;top:" + (-offY) + "px;width:" + cw + "px;height:" + ch + "px;clip-path:" + (part === "top" ? "inset(0 0 " + Math.max(0, ch - offY - cut) + "px 0)" : "inset(" + (offY + cut) + "px 0 0 0)");
+    const dpr = pxDpr(cw, ch);
+    const c1 = document.createElement("canvas"); c1.className = "pdf"; c1.width = Math.round(cw * dpr); c1.height = Math.round(ch * dpr);
+    const c2 = document.createElement("canvas"); c2.className = "ink"; c2.width = c1.width; c2.height = c1.height;
+    pin.appendChild(c1); pin.appendChild(c2); d.appendChild(pin);
+    views.push({ p:pp, el:d, pdf:c1, ink:c2, cw, ch });
+  });
+  const line = document.createElement("div"); line.className = "halfline"; line.style.top = cut + "px"; line.innerHTML = "<span>▲ pagina " + q + "</span>"; d.appendChild(line);
+  pagesEl.innerHTML = ""; pagesEl.appendChild(d); R.view = views; R.count = 1; scroller.scrollTop = 0;
+  updatePgno();
+  views.forEach(v => { bindInk(v); drawPage(v); loadMarks(v.p).then(() => { if(v.el.isConnected) redrawInk(v); }); });
+}
 async function renderView(scrollTo){
   if(!R.doc) return;
+  if(R.half && !halfOk()) R.half = false;
+  if(R.half) return renderHalf();
   const tok = R.token, n = R.doc.numPages;
   const cnt = perView(); R.count = cnt;
   if(cnt === 2 && R.page === n && n > 1) R.page = n - 1;
@@ -1519,7 +1591,7 @@ async function drawPage(v){
 }
 function updatePgno(){
   const n = R.doc ? R.doc.numPages : 0; const last = Math.min(n, R.page + R.count - 1);
-  $("#rPg").textContent = n ? (last > R.page ? R.page + "–" + last : R.page) + " / " + n : "";
+  $("#rPg").textContent = n ? (R.half ? R.page + "→" + (R.page + 1) : last > R.page ? R.page + "–" + last : R.page) + " / " + n : "";
   $("#rPg").hidden = !n;
   if(!$("#jump").hidden) drawJump();
 }
@@ -1540,6 +1612,8 @@ async function next(){
     scroller.scrollTo({ top:scroller.scrollTop + scroller.clientHeight * 0.85, behavior:matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); flash("r"); return;
   }
   const n = R.doc.numPages;
+  if(R.half){ R.half = false; R.page += 1; flash("r"); await renderView("top"); return; }
+  if(halfOk()){ R.half = true; flash("r"); await renderView("top"); return; }
   if(R.page + R.count <= n){ R.page += R.count; flash("r"); await renderView("top"); return; }
   if(R.list && R.idx < R.ids.length - 1){ flash("r"); await loadScore(R.idx + 1, 1); endMsg(R.score.title); return; }
   endMsg(R.list ? "Einde van het programma" : "Laatste pagina");
@@ -1549,6 +1623,7 @@ async function prev(){
   if(SET.fit === "width" && scroller.scrollTop > 4){
     scroller.scrollTo({ top:Math.max(0, scroller.scrollTop - scroller.clientHeight * 0.85), behavior:matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); flash("l"); return;
   }
+  if(R.half){ R.half = false; flash("l"); await renderView("top"); return; }
   if(R.page > 1){ R.page = Math.max(1, R.page - R.count); flash("l"); await renderView(SET.fit === "width" ? "bottom" : "top"); return; }
   if(R.list && R.idx > 0){ flash("l"); await loadScore(R.idx - 1, -1); endMsg(R.score.title); return; }
   endMsg("Eerste pagina");
@@ -1651,9 +1726,9 @@ $("#rPart").onclick = () => {
 $("#partList").onclick = e => { const b = e.target.closest("[data-id]"); if(!b) return; closePops(); if(b.dataset.id === R.score.id) return; R.ids[R.idx] = b.dataset.id; loadScore(R.idx, 1); };
 $("#rPg").onclick = () => { const was = !$("#jump").hidden; closePops(); if(!was && R.doc){ $("#jump").hidden = false; drawJump(); } showChrome(0); };
 let jumpT = null;
-$("#jumpR").oninput = e => { const p = +e.target.value; $("#jumpN").textContent = p + " / " + (R.doc ? R.doc.numPages : 1); clearTimeout(jumpT); jumpT = setTimeout(() => { R.page = p; renderView("top"); }, 90); };
-$("#jumpF").onclick = () => { R.page = 1; renderView("top"); };
-$("#jumpL").onclick = () => { if(R.doc){ R.page = R.doc.numPages; renderView(SET.fit === "width" ? "bottom" : "top"); } };
+$("#jumpR").oninput = e => { const p = +e.target.value; $("#jumpN").textContent = p + " / " + (R.doc ? R.doc.numPages : 1); clearTimeout(jumpT); jumpT = setTimeout(() => { R.page = p; R.half = false; renderView("top"); }, 90); };
+$("#jumpF").onclick = () => { R.page = 1; R.half = false; renderView("top"); };
+$("#jumpL").onclick = () => { if(R.doc){ R.page = R.doc.numPages; R.half = false; renderView(SET.fit === "width" ? "bottom" : "top"); } };
 $("#rAnnot").onclick = () => setAnnot(!R.annot);
 $("#sNext").onclick = () => { if(R.idx < R.ids.length - 1) loadScore(R.idx + 1, 1); };
 $("#sPrev").onclick = () => { if(R.idx > 0) loadScore(R.idx - 1, 1); };
@@ -1662,6 +1737,7 @@ $("#pop").addEventListener("click", e => {
   SET[b.parentElement.dataset.set] = b.dataset.v; saveSettings(); applySettings(); renderView("top");
 });
 $("#optTrim").onchange = e => { SET.trim = e.target.checked; R.trim = {}; saveSettings(); renderView("top"); };
+$("#optHalf").onchange = e => { SET.half = e.target.checked; R.half = false; saveSettings(); renderView("top"); };
 $("#optPen").onchange = e => { SET.penOnly = e.target.checked; saveSettings(); applySettings(); };
 $("#optFull").onchange = e => { SET.autoFull = e.target.checked; saveSettings(); };
 $("#showZones").onclick = () => { const z = $("#zones"); z.classList.add("on"); setTimeout(() => z.classList.remove("on"), 1800); };
@@ -1671,7 +1747,7 @@ function applySettings(){
   reader.classList.toggle("penonly", !!SET.penOnly || R.sawPen);
   reader.classList.remove("paper-white", "paper-warm", "paper-night"); reader.classList.add("paper-" + SET.paper);
   $$("#pop .seg").forEach(seg => $$("button", seg).forEach(b => b.setAttribute("aria-pressed", String(SET[seg.dataset.set] === b.dataset.v))));
-  $("#optPen").checked = !!SET.penOnly; $("#optFull").checked = !!SET.autoFull; $("#optTrim").checked = SET.trim !== false;
+  $("#optHalf").checked = !!SET.half; $("#optPen").checked = !!SET.penOnly; $("#optFull").checked = !!SET.autoFull; $("#optTrim").checked = SET.trim !== false;
 }
 
 /* ================= quick recording ================= */
