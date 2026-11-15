@@ -355,6 +355,8 @@ button.pgno{background:transparent;border:1px solid var(--chrome-line);border-ra
 .tk-pill .x{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--surface-2);display:inline-flex;align-items:center;justify-content:center}
 body.reading .tk,body.reading .tk-pill{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
 @media (max-width:640px){#tkBtn .tkl,#camBtn .caml{display:none}#tkBtn,#camBtn{padding:0 13px}}
+.campop .shots figure{margin:0;position:relative}.campop .shots figcaption{position:absolute;left:4px;top:2px;font-size:11px;font-weight:700;color:#fff;text-shadow:0 0 3px #000}.shotbtns{display:flex;gap:2px;justify-content:center;margin-top:2px}.shotbtns button{border:1px solid var(--line);background:var(--card,#fff);color:inherit;border-radius:6px;min-width:24px;height:24px;font-size:13px;cursor:pointer}
+.cropper{position:fixed;inset:0;z-index:300;background:#111;display:flex;flex-direction:column}.cropbar{display:flex;gap:8px;align-items:center;padding:10px;flex-wrap:wrap;background:#1b1b1b}.cropbar .btn.ghost{color:#eee;border-color:#555;background:transparent}.cropbar .crophint{flex:1;color:#ccc;font-size:13px;min-width:120px}.cropstage{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:16px}.cropstage canvas{touch-action:none;max-width:100%;max-height:100%}
 .campop{display:flex;flex-direction:column;gap:12px}.campop .shots{display:flex;gap:8px;flex-wrap:wrap}.campop .shots img{width:72px;height:100px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
 @media (max-width:560px){.tk{right:0;left:0;width:auto;margin:0 8px;bottom:calc(8px + env(safe-area-inset-bottom,0px));max-height:72vh}}
 </style>
@@ -379,6 +381,7 @@ body.reading .tk,body.reading .tk-pill{bottom:calc(76px + env(safe-area-inset-bo
     <button class="btn" id="camBtn" type="button" aria-label="Foto nemen"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span class="caml">Foto</span></button>
     <input id="file" type="file" accept="application/pdf,.pdf,image/*,.json,application/json,.zip,application/zip,application/x-zip-compressed,.musicxml,.mxl,.xml,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml,text/xml,application/xml" multiple hidden>
     <input id="cam" type="file" accept="image/*" capture="environment" hidden>
+    <input id="camGalIn" type="file" accept="image/*" multiple hidden>
   </div>
 
   <div class="bar">
@@ -759,29 +762,129 @@ function picsToPdf(pics, name){
   const base = (name || "Foto").replace(/\.[a-z0-9]+$/i, "");
   return new File(parts, base + ".pdf", { type:"application/pdf" });
 }
+/* ---- scanner: find page, straighten (perspective), clean up to a white sheet ---- */
+async function bitmapOf(f){ try{ return await createImageBitmap(f, { imageOrientation:"from-image" }); }catch(e){ return await loadImg(f); } }
+function srcCanvas(bm, MAX){ const w0 = bm.width || bm.naturalWidth, h0 = bm.height || bm.naturalHeight; const sc = Math.min(1, MAX / Math.max(w0, h0)); const c = document.createElement("canvas"); c.width = Math.round(w0 * sc); c.height = Math.round(h0 * sc); c.getContext("2d").drawImage(bm, 0, 0, c.width, c.height); return c; }
+function autoCorners(c){
+  const S2 = 360, sc = Math.min(1, S2 / Math.max(c.width, c.height)); const w = Math.max(8, Math.round(c.width * sc)), h = Math.max(8, Math.round(c.height * sc));
+  const t = document.createElement("canvas"); t.width = w; t.height = h; const x = t.getContext("2d"); x.filter = "blur(2px)"; x.drawImage(c, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h).data; const L = new Uint8Array(w * h); const hist = new Array(256).fill(0);
+  for(let i = 0; i < w * h; i++){ const r = d[i*4], g = d[i*4+1], b = d[i*4+2]; const mx = Math.max(r, g, b), mn = Math.min(r, g, b); const v = Math.max(0, Math.round((r*.3 + g*.59 + b*.11) - (mx - mn) * .6)); L[i] = v; hist[v]++; }
+  let sum = 0; for(let i = 0; i < 256; i++) sum += i * hist[i]; let sB = 0, wB = 0, best = 0, th = 128;
+  for(let i = 0; i < 256; i++){ wB += hist[i]; if(!wB) continue; const wF = w * h - wB; if(!wF) break; sB += i * hist[i]; const mB = sB / wB, mF = (sum - sB) / wF; const v = wB * wF * (mB - mF) * (mB - mF); if(v > best){ best = v; th = i; } }
+  const seen = new Uint8Array(w * h); let bestComp = null;
+  for(let s0 = 0; s0 < w * h; s0++){
+    if(seen[s0] || L[s0] <= th) continue;
+    const st = [s0]; seen[s0] = 1; let n = 0, a = [1e9, -1e9, 1e9, -1e9], P = [0, 0, 0, 0];
+    while(st.length){ const p = st.pop(); n++; const px = p % w, py = (p / w) | 0; const s = px + py, df = px - py;
+      if(s < a[0]){ a[0] = s; P[0] = p; } if(s > a[1]){ a[1] = s; P[1] = p; } if(df < a[2]){ a[2] = df; P[2] = p; } if(df > a[3]){ a[3] = df; P[3] = p; }
+      for(const q of [p - 1, p + 1, p - w, p + w]){ if(q < 0 || q >= w * h || seen[q] || L[q] <= th) continue; if((q === p - 1 && px === 0) || (q === p + 1 && px === w - 1)) continue; seen[q] = 1; st.push(q); } }
+    if(!bestComp || n > bestComp.n) bestComp = { n, P };
+  }
+  const pt = p => [(p % w + .5) / w, (((p / w) | 0) + .5) / h];
+  if(!bestComp || bestComp.n < w * h * .18) return [[.03, .03], [.97, .03], [.97, .97], [.03, .97]];
+  const [tl, br, bl, tr] = [pt(bestComp.P[0]), pt(bestComp.P[1]), pt(bestComp.P[2]), pt(bestComp.P[3])];
+  return [tl, tr, br, bl];
+}
+function solveH(src, dst){ /* maps dst(x,y) -> src(u,v) */
+  const A = [], B = [];
+  for(let i = 0; i < 4; i++){ const [x, y] = dst[i], [u, v] = src[i]; A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); B.push(u); A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); B.push(v); }
+  for(let c = 0; c < 8; c++){ let m = c; for(let r = c + 1; r < 8; r++) if(Math.abs(A[r][c]) > Math.abs(A[m][c])) m = r; [A[c], A[m]] = [A[m], A[c]]; [B[c], B[m]] = [B[m], B[c]];
+    for(let r = 0; r < 8; r++){ if(r === c) continue; const f = A[r][c] / A[c][c]; for(let k = c; k < 8; k++) A[r][k] -= f * A[c][k]; B[r] -= f * B[c]; } }
+  return B.map((b, i) => b / A[i][i]).concat(1);
+}
+function warpScan(c, q, mode){
+  const W0 = c.width, H0 = c.height; const P = q.map(([u, v]) => [u * W0, v * H0]);
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  let ow = Math.max(dist(P[0], P[1]), dist(P[3], P[2])), oh = Math.max(dist(P[0], P[3]), dist(P[1], P[2]));
+  const ratio = oh / ow; if(Math.abs(ratio - 1.414) < .12) oh = ow * 1.414; /* snap to A4 */
+  const sc = Math.min(2200 / Math.max(ow, oh), 2); const w = Math.round(ow * sc), h = Math.round(oh * sc);
+  const Hm = solveH(P, [[0, 0], [w, 0], [w, h], [0, h]]);
+  const sd = c.getContext("2d").getImageData(0, 0, W0, H0).data; const out = new ImageData(w, h); const od = out.data;
+  for(let y = 0; y < h; y++){ for(let x = 0; x < w; x++){
+    const z = Hm[6] * x + Hm[7] * y + 1; let u = (Hm[0] * x + Hm[1] * y + Hm[2]) / z, v = (Hm[3] * x + Hm[4] * y + Hm[5]) / z;
+    u = Math.min(W0 - 1.001, Math.max(0, u)); v = Math.min(H0 - 1.001, Math.max(0, v)); const x0 = u | 0, y0 = v | 0, fx = u - x0, fy = v - y0; const i = (y0 * W0 + x0) * 4, j = (y * w + x) * 4;
+    for(let k = 0; k < 3; k++){ const a = sd[i + k] + (sd[i + 4 + k] - sd[i + k]) * fx, b = sd[i + W0 * 4 + k] + (sd[i + W0 * 4 + 4 + k] - sd[i + W0 * 4 + k]) * fx; od[j + k] = a + (b - a) * fy; }
+    od[j + 3] = 255; } }
+  if(mode === "scan") cleanSheet(out);
+  const oc = document.createElement("canvas"); oc.width = w; oc.height = h; oc.getContext("2d").putImageData(out, 0, 0); return oc;
+}
+function cleanSheet(img){ /* divide by blurred background -> white paper, dark ink */
+  const { width:w, height:h, data:d } = img; const L = new Float32Array(w * h);
+  for(let i = 0; i < w * h; i++) L[i] = d[i*4] * .3 + d[i*4+1] * .59 + d[i*4+2] * .11;
+  const sw = Math.max(8, Math.round(w / 40)), sh = Math.max(8, Math.round(h / 40)); const gw = Math.ceil(w / sw), gh = Math.ceil(h / sh); const G = new Float32Array(gw * gh);
+  for(let gy = 0; gy < gh; gy++) for(let gx = 0; gx < gw; gx++){ const vals = []; for(let y = gy * sh; y < Math.min(h, gy * sh + sh); y += 2) for(let x = gx * sw; x < Math.min(w, gx * sw + sw); x += 2) vals.push(L[y * w + x]); vals.sort((a, b) => a - b); G[gy * gw + gx] = vals[Math.floor(vals.length * .9)] || 255; }
+  const G2 = new Float32Array(gw * gh); for(let gy = 0; gy < gh; gy++) for(let gx = 0; gx < gw; gx++){ let s = 0, n = 0; for(let dy = -1; dy <= 1; dy++) for(let dx = -1; dx <= 1; dx++){ const X = gx + dx, Y = gy + dy; if(X >= 0 && Y >= 0 && X < gw && Y < gh){ s += Math.max(G[Y * gw + X], 40); n++; } } G2[gy * gw + gx] = s / n; }
+  for(let y = 0; y < h; y++){ const fy = Math.min(gh - 1.001, Math.max(0, y / sh - .5)), y0 = fy | 0, ty = fy - y0;
+    for(let x = 0; x < w; x++){ const fx = Math.min(gw - 1.001, Math.max(0, x / sw - .5)), x0 = fx | 0, tx = fx - x0; const k = y0 * gw + x0;
+      const bg = (G2[k] * (1 - tx) + G2[k + 1] * tx) * (1 - ty) + (G2[k + gw] * (1 - tx) + G2[k + gw + 1] * tx) * ty;
+      let r = Math.min(1, Math.max(0, (L[y * w + x] / bg * 1.06 - .12) / .8)); r = Math.pow(r, 1.8); const v = Math.max(0, Math.min(255, r * 255)); const i = (y * w + x) * 4; d[i] = d[i+1] = d[i+2] = v; } }
+}
+function canvasPic(oc){ return new Promise(res => oc.toBlob(async b => res({ w:oc.width, h:oc.height, bytes:new Uint8Array(await b.arrayBuffer()), url:URL.createObjectURL(b) }), "image/jpeg", .85)); }
+let scanMode = ls("scanMode") || "scan";
+function cropEditor(file){
+  return new Promise(async resolve => {
+    const bm = await bitmapOf(file); const c = srcCanvas(bm, 2800); let q = autoCorners(c);
+    const sc = document.createElement("div"); sc.className = "cropper";
+    sc.innerHTML = '<div class="cropbar"><button class="btn ghost" type="button" data-a="x">Annuleren</button><span class="crophint">Sleep de hoeken naar de hoeken van het blad</span><button class="btn ghost" type="button" data-a="full">Hele foto</button><button class="btn ghost" type="button" data-a="mode"></button><button class="btn brass" type="button" data-a="ok">Rechttrekken</button></div><div class="cropstage"><canvas></canvas></div>';
+    document.body.appendChild(sc);
+    const cv = $("canvas", sc), ctx = cv.getContext("2d"), stage = $(".cropstage", sc); let box = null, drag = -1;
+    const modeBtn = $('[data-a="mode"]', sc); const setMode = () => modeBtn.textContent = scanMode === "scan" ? "Stijl: scan (wit)" : "Stijl: kleur"; setMode();
+    const layout = () => { const r = stage.getBoundingClientRect(); const s = Math.min(r.width / c.width, r.height / c.height); cv.width = Math.round(c.width * s); cv.height = Math.round(c.height * s); box = cv.getBoundingClientRect(); draw(); };
+    const draw = () => { ctx.drawImage(c, 0, 0, cv.width, cv.height); ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.beginPath(); ctx.rect(0, 0, cv.width, cv.height); const pts = q.map(([u, v]) => [u * cv.width, v * cv.height]); ctx.moveTo(pts[0][0], pts[0][1]); for(let i = 3; i >= 0; i--) ctx.lineTo(pts[i][0], pts[i][1]); ctx.closePath(); ctx.fill("evenodd");
+      ctx.strokeStyle = "#E0A526"; ctx.lineWidth = 2; ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath(); ctx.stroke();
+      pts.forEach(p => { ctx.beginPath(); ctx.arc(p[0], p[1], 14, 0, 7); ctx.fillStyle = "rgba(224,165,38,.35)"; ctx.fill(); ctx.lineWidth = 3; ctx.stroke(); }); };
+    const pos = e => [(e.clientX - box.left) / box.width, (e.clientY - box.top) / box.height];
+    cv.addEventListener("pointerdown", e => { box = cv.getBoundingClientRect(); const [u, v] = pos(e); let bi = -1, bd = 1e9; q.forEach(([a, b], i) => { const dd = Math.hypot((a - u) * box.width, (b - v) * box.height); if(dd < bd){ bd = dd; bi = i; } }); if(bd < 60){ drag = bi; cv.setPointerCapture(e.pointerId); e.preventDefault(); } });
+    cv.addEventListener("pointermove", e => { if(drag < 0) return; const [u, v] = pos(e); q[drag] = [Math.min(1, Math.max(0, u)), Math.min(1, Math.max(0, v))]; draw(); });
+    const up = () => drag = -1; cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+    const ro = new ResizeObserver(layout); ro.observe(stage);
+    const done = v => { ro.disconnect(); sc.remove(); if(bm.close) bm.close(); resolve(v); };
+    sc.addEventListener("click", async e => { const b = e.target.closest("[data-a]"); if(!b) return; const a = b.dataset.a;
+      if(a === "x") done(null);
+      else if(a === "full"){ q = [[0, 0], [1, 0], [1, 1], [0, 1]]; draw(); }
+      else if(a === "mode"){ scanMode = scanMode === "scan" ? "color" : "scan"; ls("scanMode", scanMode); setMode(); }
+      else if(a === "ok"){ b.disabled = true; b.textContent = "Bezig…"; await new Promise(r => setTimeout(r, 30)); try{ done(await canvasPic(warpScan(c, q, scanMode))); }catch(err){ done(null); toast("Rechttrekken mislukt.", 3000); } }
+    });
+  });
+}
+async function rotatePic(p){ const im = await loadImg(new Blob([p.bytes], { type:"image/jpeg" })); const c = document.createElement("canvas"); c.width = p.h; c.height = p.w; const x = c.getContext("2d"); x.translate(c.width, 0); x.rotate(Math.PI / 2); x.drawImage(im, 0, 0); URL.revokeObjectURL(p.url); return canvasPic(c); }
+
 /* camera: shoot one or more pages, then save as one score */
-let camShots = [];
+let camShots = []; /* processed pics {w,h,bytes,url} */
+async function camAdd(files){
+  for(const f of files){ const p = await cropEditor(f); if(p) camShots.push(p); }
+  if(camShots.length) camSheet(); else camClose();
+}
 function camSheet(){
   let sc = document.getElementById("camScrim");
   if(!sc){
     sc = document.createElement("div"); sc.className = "scrim"; sc.id = "camScrim";
-    sc.innerHTML = '<div class="sheet campop" role="dialog" aria-modal="true" aria-labelledby="camH"><h2 id="camH">Foto als partituur</h2><p class="hint" id="camInfo"></p><div class="shots" id="camShots"></div><label class="field">Titel<input id="camTitle" type="text" placeholder="Titel van het stuk"></label><div class="acts"><button class="btn ghost spacer" type="button" id="camCancel">Annuleren</button><button class="btn" type="button" id="camMore">+ Nog een pagina</button><button class="btn brass" type="button" id="camSave">Opslaan</button></div></div>';
+    sc.innerHTML = '<div class="sheet campop" role="dialog" aria-modal="true" aria-labelledby="camH"><h2 id="camH">Foto\'s als partituur</h2><p class="hint" id="camInfo"></p><div class="shots" id="camShots"></div><label class="field">Titel<input id="camTitle" type="text" placeholder="Titel van het stuk"></label><div class="acts"><button class="btn ghost spacer" type="button" id="camCancel">Annuleren</button><button class="btn" type="button" id="camGal">+ Uit galerij</button><button class="btn" type="button" id="camMore">+ Foto</button><button class="btn brass" type="button" id="camSave">Opslaan</button></div></div>';
     document.body.appendChild(sc);
     sc.addEventListener("click", e => { if(e.target === sc) camClose(); });
     sc.querySelector("#camCancel").onclick = camClose;
     sc.querySelector("#camMore").onclick = () => $("#cam").click();
+    sc.querySelector("#camGal").onclick = () => $("#camGalIn").click();
+    sc.querySelector("#camShots").addEventListener("click", async e => {
+      const b = e.target.closest("button[data-i]"); if(!b) return; const i = +b.dataset.i, a = b.dataset.a;
+      if(a === "del"){ URL.revokeObjectURL(camShots[i].url); camShots.splice(i, 1); }
+      else if(a === "left" && i > 0) [camShots[i - 1], camShots[i]] = [camShots[i], camShots[i - 1]];
+      else if(a === "rot") camShots[i] = await rotatePic(camShots[i]);
+      camSheet();
+    });
     sc.querySelector("#camSave").onclick = async () => {
       const shots = camShots.slice(); const t = sc.querySelector("#camTitle").value.trim() || "Foto " + new Date().toLocaleDateString("nl-BE");
-      camClose(); if(!shots.length) return;
-      try{ const pdf = await imagesToPdf(shots, t); await importFiles([pdf]); }catch(e){ toast("Foto kon niet worden bewaard.", 4000); }
+      camShots = []; camClose(); if(!shots.length) return;
+      try{ const pdf = picsToPdf(shots, t); shots.forEach(p => URL.revokeObjectURL(p.url)); await importFiles([pdf]); }catch(e){ toast("Foto kon niet worden bewaard.", 4000); }
     };
   }
   sc.hidden = false;
-  const box = sc.querySelector("#camShots"); box.innerHTML = "";
-  camShots.forEach(f => { const im = document.createElement("img"); im.alt = ""; im.src = URL.createObjectURL(f); box.appendChild(im); });
-  sc.querySelector("#camInfo").textContent = camShots.length === 1 ? "1 pagina. Meerdere pagina's? Neem er nog een." : camShots.length + " pagina's.";
+  const box = sc.querySelector("#camShots");
+  box.innerHTML = camShots.map((p, i) => '<figure><img alt="Pagina ' + (i + 1) + '" src="' + p.url + '"><figcaption>' + (i + 1) + '</figcaption><div class="shotbtns">' + (i ? '<button type="button" data-a="left" data-i="' + i + '" aria-label="Naar voor">‹</button>' : "") + '<button type="button" data-a="rot" data-i="' + i + '" aria-label="Draaien">⟳</button><button type="button" data-a="del" data-i="' + i + '" aria-label="Verwijderen">✕</button></div></figure>').join("");
+  sc.querySelector("#camInfo").textContent = camShots.length === 1 ? "1 pagina. Meerdere pagina's? Voeg er nog toe, ze worden samen één partituur." : camShots.length + " pagina's, samen één partituur. Volgorde aanpassen met ‹.";
 }
-function camClose(){ camShots = []; const sc = document.getElementById("camScrim"); if(sc){ sc.hidden = true; sc.querySelector("#camTitle").value = ""; } }
+function camClose(){ camShots.forEach(p => URL.revokeObjectURL(p.url)); camShots = []; const sc = document.getElementById("camScrim"); if(sc){ sc.hidden = true; sc.querySelector("#camTitle").value = ""; } }
 
 /* ---- ZIP: own reader (stored + deflate via DecompressionStream), no internet needed ---- */
 async function inflateRaw(u8){
@@ -1268,7 +1371,8 @@ function fmtDate(d){ try{ return new Date(d + "T12:00:00").toLocaleDateString("n
 $("#addBtn").addEventListener("click", () => { if(!ls("cloudTip")){ ls("cloudTip", true); toast("Tip: in de bestandskiezer vind je via het menu ☰ ook Google Drive, Dropbox en OneDrive (als die apps op je toestel staan).", 7000); } $("#file").click(); });
 $("#file").addEventListener("change", e => { importFiles(e.target.files); e.target.value = ""; });
 $("#camBtn").addEventListener("click", () => { if(S.readOnly){ toast("Je kan hier alleen lezen."); return; } $("#cam").click(); });
-$("#cam").addEventListener("change", e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if(!f) return; camShots.push(f); camSheet(); });
+$("#cam").addEventListener("change", e => { const fs = Array.from(e.target.files || []); e.target.value = ""; if(fs.length) camAdd(fs); });
+$("#camGalIn").addEventListener("change", e => { const fs = Array.from(e.target.files || []); e.target.value = ""; if(fs.length) camAdd(fs); });
 $("#q").addEventListener("input", e => { S.q = e.target.value; renderLib(); });
 $("#sort").addEventListener("change", e => { S.sort = e.target.value; ls("sort", S.sort); renderLib(); });
 $("#tabScores").addEventListener("click", () => { S.tab = "scores"; ls("tab", S.tab); renderLib(); });
