@@ -573,7 +573,10 @@ const DPR = () => Math.min(window.devicePixelRatio || 1, 3);
 function toast(msg, ms){ const d = document.createElement("div"); d.textContent = msg; $("#toast").appendChild(d); setTimeout(() => d.remove(), ms || 3200); }
 function ls(k, v){ try{ if(v === undefined){ const x = localStorage.getItem("lsn_" + k); return x == null ? null : JSON.parse(x); } localStorage.setItem("lsn_" + k, JSON.stringify(v)); }catch(e){ return null; } }
 function ytBase(s){ const t = s.group || (s.part && s.title ? s.title.replace(new RegExp("[\\s–—-]*" + s.part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*$", "i"), "") : s.title) || ""; return t.replace(/\s*[–—-]\s*((\d|bas|bass)\b.*|trom.*|trb.*|tpt.*|trump.*|alt.*|ten.*|bari.*|piano|drums|guitar)$/i, ""); }
-function ytSearch(s){ return "https://www.youtube.com/results?search_query=" + encodeURIComponent([ytBase(s), s.arr ? "arr. " + s.arr : s.composer].filter(Boolean).join(" ")); }
+const HAFA_RE = /harmonie|fanfare|brass ?band|hafabra|blaasorkest|concert ?band|wind ?band|symphonic band/i;
+function orchKind(o){ return o ? (o.kind ? (o.kind === "other" ? "" : o.kind) : (HAFA_RE.test(o.name || "") ? "hafabra" : /big ?band|jazz/i.test(o.name || "") ? "bigband" : "")) : ""; }
+function isHafabra(s){ return (s.orchestras || []).some(i => orchKind(S.orchestras[i]) === "hafabra"); }
+function ytSearch(s){ return "https://www.youtube.com/results?search_query=" + encodeURIComponent([ytBase(s), s.arr ? "arr. " + s.arr : s.composer, isHafabra(s) ? "hafabra" : ""].filter(Boolean).join(" ")); }
 function listenUrl(s){ const l = (s.link || "").trim(); return /^https?:\/\//i.test(l) ? l : ytSearch(s); }
 const PALETTE = ["#C2410C","#1D4ED8","#047857","#7C3AED","#B45309","#BE185D","#0E7490","#4D5563"];
 const ICON = {
@@ -1321,13 +1324,13 @@ function scoreSheet(s){
     '<div class="row"><label class="field">Componist<input id="fC" value="' + esc(s.composer) + '"></label><label class="field">Arrangeur<input id="fA" placeholder="bv. Mark Taylor" value="' + esc(s.arr || "") + '"></label></div><div class="row"><label class="field">Partij<input id="fP" placeholder="bv. Trombone 1" value="' + esc(s.part) + '"></label></div>' +
     '<label class="field">Hoort bij stuk (voor meerdere partijen van hetzelfde nummer)<input id="fG" list="fGl" placeholder="leeg = apart stuk" value="' + esc(s.group || (partInfo(s).part && siblings(s).length > 1 ? partInfo(s).base : "")) + '"><datalist id="fGl">' + pieceNames().map(n => '<option value="' + esc(n) + '">').join("") + "</datalist></label>" +
     '<label class="field">Link om te beluisteren (YouTube)<input id="fL" type="url" inputmode="url" placeholder="https://www.youtube.com/watch?v=…" value="' + esc(s.link || "") + '"></label>' +
-    '<p class="hint" style="margin-top:-8px"><a href="' + esc(ytSearch(s)) + '" target="_blank" rel="noopener" id="fYt">Zoek dit arrangement op YouTube</a> (titel + arrangeur) en plak de link van de juiste opname hierboven. Geldt voor alle partijen van het stuk.</p>' +
+    '<p class="hint" style="margin-top:-8px"><a href="' + esc(ytSearch(s)) + '" target="_blank" rel="noopener" id="fYt">Zoek dit arrangement op YouTube</a> (titel + arrangeur' + (isHafabra(s) ? ' + hafabra' : '') + ') en plak de link van de juiste opname hierboven. Geldt voor alle partijen van het stuk.</p>' +
     '<div class="field">Orkesten<div class="pick">' + (orchs.length ? orchs.map(o => '<label><input type="checkbox" value="' + esc(o.id) + '"' + ((s.orchestras || []).includes(o.id) ? " checked" : "") + '><i class="dot" style="width:10px;height:10px;border-radius:50%;background:' + esc(o.color) + '"></i>' + esc(o.name) + "</label>").join("") : '<span class="hint">Maak eerst een orkest aan met + Orkest.</span>') + "</div></div>" +
     (sets.length ? '<label class="field">Toevoegen aan programma<select id="fS"><option value="">Geen</option>' + sets.map(l => '<option value="' + esc(l.id) + '"' + ((l.items || []).includes(s.id) ? " disabled" : "") + ">" + esc(l.name) + ((l.items || []).includes(s.id) ? " (staat er al in)" : "") + "</option>").join("") + "</select></label>" : "") +
     '<div class="acts"><button class="btn ghost danger spacer" type="button" id="fDel">Verwijderen</button><button class="btn ghost" type="button" id="fX">Annuleren</button><button class="btn primary" type="button" id="fOk">Opslaan</button></div>',
     (sh, close) => {
       $("#fX", sh).onclick = close;
-      const upd = () => { $("#fYt", sh).href = ytSearch({ title:$("#fT", sh).value, part:$("#fP", sh).value, group:$("#fG", sh).value, arr:$("#fA", sh).value, composer:$("#fC", sh).value }); };
+      const upd = () => { $("#fYt", sh).href = ytSearch({ title:$("#fT", sh).value, part:$("#fP", sh).value, group:$("#fG", sh).value, arr:$("#fA", sh).value, composer:$("#fC", sh).value, orchestras:s.orchestras }); };
       ["#fT","#fA","#fC","#fP","#fG"].forEach(k => $(k, sh).addEventListener("input", upd));
       $("#fOk", sh).onclick = async () => {
         const fields = { title:$("#fT", sh).value.trim() || s.title, composer:$("#fC", sh).value.trim(), arr:$("#fA", sh).value.trim(), part:$("#fP", sh).value.trim(), link:$("#fL", sh).value.trim(), orchestras:$$(".pick input:checked", sh).map(i => i.value), group:$("#fG", sh).value.trim() };
@@ -1354,15 +1357,19 @@ function orchSheet(o){
   sheet(
     "<h2>" + (o ? "Orkest bewerken" : "Nieuw orkest") + "</h2>" +
     '<label class="field">Naam<input id="oN" value="' + esc(o ? o.name : "") + '" placeholder="bv. Harmonie Oudenburg"></label>' +
+    '<label class="field">Soort<select id="oK"><option value="other">Andere</option><option value="hafabra">Harmonie / fanfare / brassband (hafabra)</option><option value="bigband">Bigband</option></select></label>' +
+    '<p class="hint" style="margin-top:-8px">Bij hafabra zoekt de luisterknop op YouTube ook op „hafabra”.</p>' +
     '<div class="field">Kleur<div class="swatches">' + PALETTE.map(c => '<button type="button" data-c="' + c + '" style="background:' + c + '" aria-label="Kleur ' + c + '" aria-pressed="' + (c === color) + '"></button>').join("") + "</div></div>" +
     '<div class="acts">' + (o ? '<button class="btn ghost danger spacer" type="button" id="oDel">Verwijderen</button>' : "") + '<button class="btn ghost" type="button" id="oX">Annuleren</button><button class="btn primary" type="button" id="oOk">Opslaan</button></div>',
     (sh, close) => {
       $(".swatches", sh).addEventListener("click", e => { const b = e.target.closest("button"); if(!b) return; color = b.dataset.c; $$(".swatches button", sh).forEach(x => x.setAttribute("aria-pressed", x === b)); });
+      $("#oK", sh).value = orchKind(o || { name:"" }) || "other";
+      $("#oN", sh).addEventListener("input", () => { if(!o || !o.kind){ const n = $("#oN", sh).value; $("#oK", sh).value = HAFA_RE.test(n) ? "hafabra" : /big ?band|jazz/i.test(n) ? "bigband" : $("#oK", sh).value; } });
       $("#oX", sh).onclick = close;
       $("#oOk", sh).onclick = async () => {
         const name = $("#oN", sh).value.trim(); if(!name){ $("#oN", sh).focus(); return; }
         const id = o ? o.id : uid("o");
-        await Store.put("orchestras", id, { name, color, order:o ? (o.order || 99) : Object.keys(S.orchestras).length + 1 });
+        await Store.put("orchestras", id, { name, color, kind:$("#oK", sh).value, order:o ? (o.order || 99) : Object.keys(S.orchestras).length + 1 });
         if(!o){ S.filter = id; ls("filter", id); } close(); renderLib();
       };
       if(o) confirmBtn($("#oDel", sh), "Echt verwijderen?", async () => {
