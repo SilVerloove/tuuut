@@ -852,9 +852,14 @@ async function rotatePic(p){ const im = await loadImg(new Blob([p.bytes], { type
 
 /* camera: shoot one or more pages, then save as one score */
 let camShots = []; /* processed pics {w,h,bytes,url} */
-async function camAdd(files){
+async function camAdd(files, title){
   for(const f of files){ const p = await cropEditor(f); if(p) camShots.push(p); }
-  if(camShots.length) camSheet(); else camClose();
+  if(camShots.length){ camSheet(); const t = document.getElementById("camTitle"); if(title && t && !t.value) t.value = title; } else camClose();
+}
+async function autoScanPdf(imgFiles, name){ /* ZIP photos: straighten automatically, no editor */
+  const pics = [];
+  for(const f of imgFiles){ try{ const bm = await bitmapOf(f); const c = srcCanvas(bm, 2800); if(bm.close) bm.close(); const p = await canvasPic(warpScan(c, autoCorners(c), scanMode)); URL.revokeObjectURL(p.url); pics.push(p); }catch(e){ pics.push(await imageToJpeg(f)); } }
+  return picsToPdf(pics, name);
 }
 function camSheet(){
   let sc = document.getElementById("camScrim");
@@ -941,7 +946,7 @@ async function expandZips(zips){
     }
     for(const key of Object.keys(groups)){
       const g = groups[key]; g.imgs.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric:true }));
-      try{ const f = await imagesToPdf(g.imgs, key.split("/").pop()); f._orch = g.orch; files.push(f); }catch(e){ toast("Foto's in " + key + " konden niet worden omgezet.", 4000); }
+      try{ const f = await autoScanPdf(g.imgs, key.split("/").pop()); f._orch = g.orch; files.push(f); }catch(e){ toast("Foto's in " + key + " konden niet worden omgezet.", 4000); }
     }
     if(!entries.length) toast(z.name + ": geen PDF's of foto's gevonden.", 4000);
   }
@@ -1171,8 +1176,9 @@ async function importFiles(list){
   const files = all.filter(f => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name));
   const imgs = all.filter(f => !files.includes(f) && (/^image\//i.test(f.type) || /\.(jpe?g|png|heic|webp)$/i.test(f.name)));
   if(imgs.length){
-    try{ imgs.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric:true })); files.push(await imagesToPdf(imgs, imgs.length === 1 ? imgs[0].name : "Foto's")); }
-    catch(e){ toast("Foto kon niet worden omgezet.", 4000); }
+    imgs.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric:true }));
+    const go = camAdd(imgs, imgs.length === 1 ? niceName(imgs[0].name.replace(/\.[a-z0-9]+$/i, "")) : "");
+    if(!files.length){ await go; return; }
   }
   if(!files.length){ toast("Kies PDF-bestanden, foto's, MusicXML of een ZIP."); return; }
   if(!pdfjs){ toast("De PDF-lezer kon niet laden. Controleer je internet en herlaad."); return; }
