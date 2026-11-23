@@ -1077,6 +1077,51 @@ async function retranspose(s, o){
 }
 
 /* ---- arranger: read from the first page when the PDF has text; a tuuut.json in a ZIP can set arranger/link per piece ---- */
+/* ---- PDF/scan -> Claude (via Android "Delen") -> MusicXML back via share target ---- */
+const CLAUDE_REQ_MS = 3 * 24 * 3600 * 1000;
+function claudePrompt(s){
+  return "TUUUT: herken deze partij als MusicXML (skill tuuut-noten). Titel: " + s.title + (s.part ? " · partij: " + s.part : "") +
+    ". Noteer alles exact zoals het op de partij staat (zelfde sleutel en stemming, niet transponeren) en geef me het .musicxml-bestand terug.";
+}
+function claudeSheet(s){
+  let file = null;
+  getPdfBytes(s).then(buf => { file = new File([buf], (s.title || "partituur").replace(/[\\/:*?"<>|]+/g, " ").trim() + ".pdf", { type:"application/pdf" }); }).catch(() => {});
+  sheet('<h2>Transponeren</h2>' +
+    '<p class="hint">Van deze partij heeft TUUUT nog geen noten, alleen een afbeelding. Laat Claude de noten eerst herkennen; daarna transponeer je hier zonder internet.</p>' +
+    '<ol class="hint" style="padding-left:20px;line-height:1.6"><li>Tik <b>Stuur naar Claude</b> en kies Claude in het deelmenu.</li><li>Claude geeft een <b>.musicxml</b>-bestand terug.</li><li>Tik dat bestand aan, kies <b>Delen → TUUUT</b>. Het komt hier binnen als nieuwe versie van dit stuk.</li></ol>' +
+    '<p class="hint">Kijk de herkende noten altijd even na tegen het origineel.</p>' +
+    '<div class="acts"><button class="btn ghost spacer" type="button" id="cX">Annuleren</button><button class="btn ghost" type="button" id="cMx">MusicXML kiezen…</button><button class="btn primary" type="button" id="cGo">Stuur naar Claude</button></div>',
+    (sh, close) => {
+      $("#cX", sh).onclick = close;
+      $("#cMx", sh).onclick = () => { ls("claudeReq", { id:s.id, at:Date.now() }); close(); $("#file").click(); };
+      $("#cGo", sh).onclick = async () => {
+        if(!file){ toast("De partituur wordt nog geladen, tik opnieuw.", 2500); return; }
+        const text = claudePrompt(s);
+        ls("claudeReq", { id:s.id, at:Date.now() });
+        if(navigator.canShare && navigator.canShare({ files:[file] })){
+          try{ await navigator.share({ files:[file], text, title:s.title }); close(); toast("Kies nu Claude. Deel het .musicxml-bestand daarna terug naar TUUUT.", 5000); return; }
+          catch(e){ if(e && e.name === "AbortError") return; }
+        }
+        /* fallback: download the PDF and copy the question */
+        const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+        try{ await navigator.clipboard.writeText(text); }catch(e){}
+        close(); toast("PDF gedownload en vraag gekopieerd. Open Claude, voeg de PDF toe en plak de vraag.", 7000);
+      };
+    });
+}
+function claudeTarget(){
+  const r = ls("claudeReq");
+  if(!r || !r.id || Date.now() - (r.at || 0) > CLAUDE_REQ_MS) return null;
+  return S.scores[r.id] || null;
+}
+function nextVersionTitle(t){
+  const base = t.replace(/\s+v\d+$/i, "");
+  let n = 2; const used = new Set(Object.values(S.scores).map(x => x.title));
+  while(used.has(base + " v" + n)) n++;
+  return base + " v" + n;
+}
+
 async function pdfCredits(doc){
   try{
     const pg = await doc.getPage(1); const tc = await pg.getTextContent();
@@ -1169,7 +1214,9 @@ async function importFiles(list){
         toast("Noten zetten: " + m.name, 2500);
         const xml = await readMusicXml(m);
         const pf = await mxToPdf(xml, { from:0, to:0, clef:"keep", shift:0, oct:0 }, m.name.replace(/\.(musicxml|mxl|xml)$/i, ""));
-        pf._mx = xml; pf._orch = m._orch; all.push(pf);
+        pf._mx = xml; pf._orch = m._orch;
+        const tgt = claudeTarget(); if(tgt){ pf._from = tgt; ls("claudeReq", null); }
+        all.push(pf);
       }catch(e){ toast(m.name + ": " + (e && e.message === "noverovio" ? "het notenprogramma kon niet laden (internet nodig de eerste keer)." : "geen geldig MusicXML-bestand."), 6000); }
     }
   }
@@ -1182,7 +1229,7 @@ async function importFiles(list){
   }
   if(!files.length){ toast("Kies PDF-bestanden, foto's, MusicXML of een ZIP."); return; }
   if(!pdfjs){ toast("De PDF-lezer kon niet laden. Controleer je internet en herlaad."); return; }
-  const loose = files.filter(f => !f._orch);
+  const loose = files.filter(f => !f._orch && !f._from);
   if(loose.length && !(S.filter !== "all" && S.orchestras[S.filter]) && orchList().length){
     const pick = await askOrch(loose.length, files.length - loose.length);
     if(pick === undefined){ toast("Toevoegen geannuleerd."); return; }
@@ -1206,6 +1253,7 @@ async function importFiles(list){
       const credits = await pdfCredits(doc); doc.destroy();
       const id = uid("s");
       const rec = { title:niceName(f.name), composer:credits.composer || "", arr:credits.arr || "", part:"", orchestras: f._orch ? [f._orch] : S.filter !== "all" && S.orchestras[S.filter] ? [S.filter] : [], pages, addedAt:Date.now(), lastOpened:0, hash:h };
+      if(f._from){ const o = f._from; const vt = nextVersionTitle(o.title), suf = vt.slice(o.title.replace(/\s+v\d+$/i, "").length); Object.assign(rec, { title:vt, composer:o.composer || rec.composer, arr:o.arr || rec.arr, part:o.part ? o.part.replace(/\s+v\d+$/i, "") + suf : "", group:o.group || undefined, link:o.link || "", orchestras:(o.orchestras || []).slice() }); }
       if(f._mx){ rec.mx = { xml:"mx_" + id, clef0:origClef(f._mx), o:{ from:0, to:0, clef:"keep", shift:0, oct:0 } }; await IDB.put("files", "mx_" + id, f._mx); }
       if(S.mode === "cloud"){
         let up;
@@ -1221,7 +1269,8 @@ async function importFiles(list){
     }
   }
   if(pendingInfo.length){ let n = 0; for(const i of pendingInfo.splice(0)) n += await applyInfo(i); if(n) renderLib(); }
-  if(ok || dup) toast([ok ? (ok === 1 ? "1 partituur toegevoegd" : ok + " partituren toegevoegd") : "", dup ? (dup === 1 ? "1 stond er al (overgeslagen)" : dup + " stonden er al (overgeslagen)") : ""].filter(Boolean).join(" · ") + ".", 4500);
+  if(ok && files.some(f => f._from)) toast("Noten van Claude toegevoegd als nieuwe versie. Open ze en tik Transponeren.", 6000);
+  else if(ok || dup) toast([ok ? (ok === 1 ? "1 partituur toegevoegd" : ok + " partituren toegevoegd") : "", dup ? (dup === 1 ? "1 stond er al (overgeslagen)" : dup + " stonden er al (overgeslagen)") : ""].filter(Boolean).join(" · ") + ".", 4500);
 }
 
 /* ================= library rendering ================= */
@@ -1576,7 +1625,7 @@ async function loadScore(idx, page){
   $("#rTitle").textContent = R.score.title;
   $("#rSub").textContent = [R.score.part, R.score.composer, (R.score.orchestras || []).filter(o => S.orchestras[o]).map(o => S.orchestras[o].name).join(", ")].filter(Boolean).join(" · ");
   $("#rListen").href = listenUrl(R.score);
-  $("#rTr").hidden = !R.score.mx || S.readOnly;
+  $("#rTr").hidden = S.readOnly;
   if(R.score.mxLabel) $("#rSub").textContent = [R.score.mxLabel, $("#rSub").textContent].filter(Boolean).join(" · ");
   { const sib = partInfo(R.score).part ? siblings(R.score) : []; $("#rPart").hidden = sib.length < 2; $("#rPartT").textContent = partInfo(R.score).part; if(sib.length > 1) $("#rTitle").textContent = partInfo(R.score).base; }
   updateSetbar(); recCount();
@@ -1831,7 +1880,7 @@ $("#rFull").onclick = () => goFull(!document.fullscreenElement);
 $("#rView").onclick = () => { const was = !$("#pop").hidden; closePops(); const p = $("#pop"); p.hidden = was; $("#rView").setAttribute("aria-pressed", String(!p.hidden)); wakeInfo(); showChrome(0); };
 function closePops(){ ["#pop","#jump","#recpop","#partpop"].forEach(s => $(s).hidden = true); $("#rView").setAttribute("aria-pressed", "false"); }
 function drawJump(){ const n = R.doc ? R.doc.numPages : 1; const r = $("#jumpR"); r.max = n; r.value = R.page; $("#jumpN").textContent = R.page + " / " + n; }
-$("#rTr").onclick = () => { if(R.score && R.score.mx){ closePops(); mxSheet(S.scores[R.score.id] || R.score); } };
+$("#rTr").onclick = () => { if(!R.score) return; closePops(); const s = S.scores[R.score.id] || R.score; if(s.mx) mxSheet(s); else claudeSheet(s); };
 $("#rPart").onclick = () => {
   const was = !$("#partpop").hidden; closePops();
   if(!was && R.score){
