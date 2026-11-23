@@ -276,6 +276,15 @@ button.pgno{background:transparent;border:1px solid var(--chrome-line);border-ra
 .loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--chrome-muted);font-size:16px;pointer-events:none}
 .endmsg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(20,21,24,.92);padding:14px 20px;border-radius:12px;font-weight:700;opacity:0;transition:opacity .3s;pointer-events:none}
 .endmsg.on{opacity:1}
+#printArea{display:none}
+@media print{
+  @page{margin:0}
+  body > *:not(#printArea){display:none!important}
+  #printArea{display:block!important}
+  #printArea img{display:block;width:100%;height:auto;break-after:page;page-break-after:always}
+  #printArea img.land{width:auto;max-width:100%;max-height:100vh;margin:0 auto}
+  #printArea img:last-child{break-after:auto;page-break-after:auto}
+}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 
 /* ---- hip theme layer ---- */
@@ -420,6 +429,7 @@ body.reading .tk,body.reading .tk-pill{bottom:calc(76px + env(safe-area-inset-bo
     <button class="pgno" id="rPg" type="button" aria-label="Naar pagina springen"></button>
     <button class="cb" id="rTr" type="button" aria-label="Transponeren" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v13M7 4 3 8M7 4l4 4M17 20V7M17 20l-4-4M17 20l4-4"/></svg><span class="lbl">Transponeren</span></button>
     <a class="cb" id="rListen" href="#" target="_blank" rel="noopener" aria-label="Beluisteren op YouTube" style="text-decoration:none"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4v16l13-8z"/></svg><span class="lbl">Beluisteren</span></a>
+    <button class="cb" id="rShare" type="button" aria-label="Delen of afdrukken"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg><span class="lbl">Delen</span></button>
     <button class="cb" id="rRec" type="button" aria-pressed="false" aria-label="Opnemen"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></svg><span class="lbl">Opnemen</span></button>
     <button class="cb" id="rRecs" type="button" aria-label="Opnames" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg><b id="rRecsN"></b></button>
     <button class="cb" id="rAnnot" type="button" aria-pressed="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span class="lbl">Aantekenen</span></button>
@@ -1109,6 +1119,81 @@ function claudeSheet(s){
         close(); toast("PDF gedownload en vraag gekopieerd. Open Claude, voeg de PDF toe en plak de vraag.", 7000);
       };
     });
+}
+/* ---- share as PDF (WhatsApp, mail ...) and print, optionally with annotations ---- */
+function safeName(t){ return (t || "partituur").replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim(); }
+async function anyMarks(){ if(!R.doc) return false; for(let p = 1; p <= R.doc.numPages; p++){ await loadMarks(p); if((R.marks[p] || []).length) return true; } return false; }
+async function pagePics(withMarks, onProg){
+  const doc = R.doc, n = doc.numPages, pics = [];
+  for(let p = 1; p <= n; p++){
+    if(onProg) onProg(p, n);
+    const pg = await doc.getPage(p); const v1 = pg.getViewport({ scale:1 });
+    const sc = 2339 / Math.max(v1.width, v1.height); const vp = pg.getViewport({ scale:sc });
+    const c = document.createElement("canvas"); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+    await pg.render({ canvasContext:ctx, viewport:vp }).promise;
+    if(withMarks){ await loadMarks(p); if((R.marks[p] || []).length){ const ink = document.createElement("canvas"); ink.width = c.width; ink.height = c.height; redrawInk({ p, ink }); ctx.drawImage(ink, 0, 0); } }
+    pics.push(await canvasPic(c));
+  }
+  return pics;
+}
+function shareSheet(s){
+  const name = safeName([s.title, s.part && !s.title.includes(s.part) ? s.part : ""].filter(Boolean).join(" – "));
+  let marks = false, prep = null, prepKey = null;
+  sheet('<h2>Delen of afdrukken</h2>' +
+    '<p class="hint">' + esc(name) + ".pdf</p>" +
+    '<label class="field" id="shMarksL" hidden style="flex-direction:row;align-items:center;gap:10px"><input type="checkbox" id="shMarks" style="width:22px;height:22px"> Met mijn aantekeningen</label>' +
+    '<p class="hint" id="shProg"></p>' +
+    '<div class="acts"><button class="btn ghost spacer" type="button" id="shX">Sluiten</button><button class="btn" type="button" id="shPrint">Afdrukken</button><button class="btn primary" type="button" id="shGo">Delen (WhatsApp, mail…)</button></div>',
+    (sh, close) => {
+      const prog = t => { $("#shProg", sh).textContent = t || ""; };
+      const want = () => marks && $("#shMarks", sh).checked;
+      /* build the file before the tap: Android only opens the share menu right after a tap */
+      const prepare = () => {
+        const key = String(want());
+        if(prepKey === key && prep) return prep;
+        prepKey = key;
+        prep = (async () => {
+          if(!want()){ const buf = await getPdfBytes(s); return { file:new File([buf], name + ".pdf", { type:"application/pdf" }), pics:null }; }
+          const pics = await pagePics(true, (p, n) => { if(prepKey === key) prog("Aantekeningen toevoegen… pagina " + p + " / " + n); });
+          const file = picsToPdf(pics, name); if(prepKey === key) prog(""); return { file, pics };
+        })();
+        prep.catch(() => { prepKey = null; prog("Voorbereiden lukte niet."); });
+        return prep;
+      };
+      anyMarks().then(m => { marks = m; if(m && sh.isConnected){ $("#shMarksL", sh).hidden = false; $("#shMarks", sh).checked = true; } prepare(); });
+      $("#shMarks", sh).onchange = () => prepare();
+      $("#shX", sh).onclick = close;
+      $("#shGo", sh).onclick = async () => {
+        const ready = await Promise.race([prepare(), new Promise(r => setTimeout(() => r(null), 60))]);
+        if(!ready){ toast("Even geduld, de PDF wordt nog gemaakt. Tik daarna opnieuw.", 3000); return; }
+        const f = ready.file;
+        if(navigator.canShare && navigator.canShare({ files:[f] })){
+          try{ await navigator.share({ files:[f], title:name }); close(); }catch(e){ if(!(e && e.name === "AbortError")) toast("Delen lukte niet.", 3000); }
+          return;
+        }
+        const a = document.createElement("a"); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+        close(); toast("Delen kan hier niet; de PDF is gedownload.", 4000);
+      };
+      $("#shPrint", sh).onclick = async () => {
+        try{
+          let pics = want() ? (await prepare()).pics : null;
+          if(!pics) pics = await pagePics(false, (p, n) => prog("Afdruk voorbereiden… pagina " + p + " / " + n));
+          prog(""); close(); printPics(pics, name);
+        }catch(e){ toast("Afdrukken lukte niet.", 3000); }
+      };
+    });
+}
+function printPics(pics, name){
+  let box = document.getElementById("printArea"); if(box) box.remove();
+  box = document.createElement("div"); box.id = "printArea";
+  box.innerHTML = pics.map((p, i) => '<img alt="Pagina ' + (i + 1) + '" src="' + p.url + '"' + (p.w > p.h ? ' class="land"' : "") + ">").join("");
+  document.body.appendChild(box);
+  const oldTitle = document.title; document.title = name;
+  const done = () => { document.title = oldTitle; box.remove(); pics.forEach(p => URL.revokeObjectURL(p.url)); window.removeEventListener("afterprint", done); };
+  window.addEventListener("afterprint", done);
+  Promise.all(Array.from(box.querySelectorAll("img")).map(im => im.decode().catch(() => {}))).then(() => setTimeout(() => window.print(), 50));
 }
 function claudeTarget(){
   const r = ls("claudeReq");
@@ -1881,6 +1966,7 @@ $("#rView").onclick = () => { const was = !$("#pop").hidden; closePops(); const 
 function closePops(){ ["#pop","#jump","#recpop","#partpop"].forEach(s => $(s).hidden = true); $("#rView").setAttribute("aria-pressed", "false"); }
 function drawJump(){ const n = R.doc ? R.doc.numPages : 1; const r = $("#jumpR"); r.max = n; r.value = R.page; $("#jumpN").textContent = R.page + " / " + n; }
 $("#rTr").onclick = () => { if(!R.score) return; closePops(); const s = S.scores[R.score.id] || R.score; if(s.mx) mxSheet(s); else claudeSheet(s); };
+$("#rShare").onclick = () => { if(!R.score || !R.doc) return; closePops(); shareSheet(S.scores[R.score.id] || R.score); };
 $("#rPart").onclick = () => {
   const was = !$("#partpop").hidden; closePops();
   if(!was && R.score){
