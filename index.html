@@ -243,6 +243,11 @@ button.pgno{background:transparent;border:1px solid var(--chrome-line);border-ra
 #reader.hidechrome .setbar{opacity:0;pointer-events:none}
 #reader.annot .setbar{display:none}
 .setbar .cb{background:var(--chrome);backdrop-filter:blur(10px)}
+.pop.setpop{top:auto;right:auto;left:50%;transform:translateX(-50%);bottom:calc(74px + env(safe-area-inset-bottom,0px));max-height:calc(100vh - 160px);overflow:auto}
+.parts button em{font-style:normal;color:var(--chrome-muted);margin-right:10px;font-variant-numeric:tabular-nums}
+.parts button[aria-pressed="true"] em{color:#111}
+.set ol button{all:unset;cursor:pointer;display:block;padding:2px 0}
+.set ol button:hover,.set ol button:focus-visible{text-decoration:underline}
 .setbar .cb span{max-width:28vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .pop{position:absolute;right:max(12px,env(safe-area-inset-right,0px));top:calc(70px + env(safe-area-inset-top,0px));z-index:6;background:#1B1D21;border:1px solid var(--chrome-line);border-radius:14px;padding:16px;width:min(340px,calc(100vw - 32px));box-sizing:border-box;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 50px rgba(0,0,0,.5)}
@@ -460,6 +465,11 @@ body.reading .tk,body.reading .tk-pill{bottom:calc(76px + env(safe-area-inset-bo
     <div class="parts" id="partList"></div>
   </div>
 
+  <div class="pop setpop" id="setpop" hidden>
+    <h3 id="setpopT">Programma</h3>
+    <div class="parts" id="setList"></div>
+  </div>
+
   <div class="pop" id="jump" hidden>
     <h3>Naar pagina</h3>
     <div class="jumpn" id="jumpN"></div>
@@ -498,7 +508,7 @@ body.reading .tk,body.reading .tk-pill{bottom:calc(76px + env(safe-area-inset-bo
 
   <div class="setbar" id="setbar" hidden>
     <button class="cb" id="sPrev" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span id="sPrevT"></span></button>
-    <span class="cb" id="sPos" style="pointer-events:none"></span>
+    <button class="cb" id="sPos" type="button" aria-label="Kies een stuk uit het programma"></button>
     <button class="cb" id="sNext" type="button"><span id="sNextT"></span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
   </div>
 
@@ -1489,7 +1499,7 @@ function drawLib(){
     let sets = Object.values(S.setlists).filter(l => S.filter === "all" || l.orchestra === S.filter);
     sets.sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999") || a.name.localeCompare(b.name));
     let out = S.readOnly ? "" : '<div style="display:flex;justify-content:flex-start;margin-bottom:16px"><button class="btn brass" type="button" data-act="newSet">+ Nieuw programma</button></div>';
-    if(!sets.length) out += '<div class="empty"><h2>Nog geen programma\'s</h2><p>Zet de stukken voor een repetitie of concert in volgorde. Tijdens het spelen ga je vanzelf door naar het volgende stuk.</p></div>';
+    if(!sets.length) out += '<div class="empty"><h2>Nog geen programma\'s</h2><p>Zet de stukken voor een repetitie of concert samen. Tik op een stuk om daar te beginnen; tijdens het spelen kies je via de teller onderaan (bv. 3 / 8) vrij een ander stuk.</p></div>';
     else {
       const groups = {};
       sets.forEach(l => { const y = l.date ? l.date.slice(0, 4) : "Zonder datum"; (groups[y] = groups[y] || []).push(l); });
@@ -1502,7 +1512,7 @@ function drawLib(){
 function setCard(l){ {
       const o = S.orchestras[l.orchestra]; const items = (l.items || []).filter(i => S.scores[i]);
       return '<div class="set" data-id="' + esc(l.id) + '"><h3>' + esc(l.name) + '</h3><div class="meta">' + (o ? '<span class="tag"><i class="dot" style="background:' + esc(o.color) + '"></i>' + esc(o.name) + "</span>" : "") + (l.date ? "<span>" + esc(fmtDate(l.date)) + "</span>" : "") + "<span>" + items.length + (items.length === 1 ? " stuk" : " stukken") + "</span></div>" +
-        (items.length ? "<ol>" + items.slice(0, 8).map(i => "<li>" + esc(S.scores[i].title) + "</li>").join("") + (items.length > 8 ? "<li>…</li>" : "") + "</ol>" : '<p class="hint">Nog leeg.</p>') +
+        (items.length ? "<ol>" + items.map((i, n) => '<li><button type="button" data-act="playAt" data-i="' + n + '" title="Begin bij dit stuk">' + esc(S.scores[i].title) + "</button></li>").join("") + "</ol>" : '<p class="hint">Nog leeg.</p>') +
         '<div class="acts" style="justify-content:flex-start"><button class="btn brass sm" type="button" data-act="playSet"' + (items.length ? "" : " disabled") + ">" + ICON.play + " Spelen</button>" + (S.readOnly ? "" : '<button class="btn sm" type="button" data-act="editSet">Bewerken</button>') + "</div></div>";
 } }
 function fmtDate(d){ try{ return new Date(d + "T12:00:00").toLocaleDateString("nl-BE", { weekday:"short", day:"numeric", month:"long", year:"numeric" }); }catch(e){ return d; } }
@@ -1532,6 +1542,7 @@ $("#view").addEventListener("click", e => {
   if(b.dataset.act === "edit" && card) scoreSheet(S.scores[card.dataset.id]);
   if(b.dataset.act === "newSet") setSheet(null);
   if(b.dataset.act === "editSet" && set) setSheet(S.setlists[set.dataset.id]);
+  if(b.dataset.act === "playAt" && set){ const l = S.setlists[set.dataset.id]; openReader((l.items || []).filter(i => S.scores[i]), +b.dataset.i, l); }
   if(b.dataset.act === "playSet" && set){ const l = S.setlists[set.dataset.id]; openReader((l.items || []).filter(i => S.scores[i]), 0, l); }
 });
 let dragDepth = 0;
@@ -1698,13 +1709,13 @@ function closeReader(){
   if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
   if(wakeLock){ const w = wakeLock; wakeLock = null; w.release().catch(() => {}); }
   if(window.tkMini) window.tkMini.hide();
-  noSleep(false); if(REC.on) recStop(); ["#jump","#recpop","#partpop"].forEach(s => $(s).hidden = true);
+  noSleep(false); if(REC.on) recStop(); ["#jump","#recpop","#partpop","#setpop"].forEach(s => $(s).hidden = true);
   renderLib();
 }
 async function loadScore(idx, page){
   const tok = ++R.token;
   Object.keys(R.saveT).forEach(k => { clearTimeout(R.saveT[k]); flushMarks(+k); });
-  R.idx = idx; R.score = S.scores[R.ids[idx]]; R.sizes = {}; R.trim = {}; R.half = false; $("#jump").hidden = true; $("#recpop").hidden = true; $("#partpop").hidden = true; R.cache.clear(); R.marks = {}; R.undo = []; R.redo = []; R.saveT = {};
+  R.idx = idx; R.score = S.scores[R.ids[idx]]; R.sizes = {}; R.trim = {}; R.half = false; $("#jump").hidden = true; $("#recpop").hidden = true; $("#partpop").hidden = true; $("#setpop").hidden = true; R.cache.clear(); R.marks = {}; R.undo = []; R.redo = []; R.saveT = {};
   if(R.doc){ R.doc.destroy(); R.doc = null; }
   pagesEl.innerHTML = ""; $("#loading").hidden = false; $("#loading").textContent = "Partituur laden…";
   $("#rTitle").textContent = R.score.title;
@@ -1900,7 +1911,7 @@ stage.addEventListener("pointercancel", () => { gest = null; });
 stage.addEventListener("pointerup", e => {
   if(!gest || gest.id !== e.pointerId) return;
   const dx = e.clientX - gest.x, dy = e.clientY - gest.y, dt = Date.now() - gest.t; gest = null;
-  if(!$("#pop").hidden || !$("#jump").hidden || !$("#recpop").hidden || !$("#partpop").hidden){ closePops(); return; }
+  if(!$("#pop").hidden || !$("#jump").hidden || !$("#recpop").hidden || !$("#partpop").hidden || !$("#setpop").hidden){ closePops(); return; }
   if(Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.4 && dt < 700){ if(dx < 0) next(); else prev(); return; }
   if(Math.abs(dx) < 12 && Math.abs(dy) < 12 && dt < 450){
     const r = stage.getBoundingClientRect(); const fx = (e.clientX - r.left) / r.width;
@@ -1963,7 +1974,7 @@ $("#rBack").onclick = closeReader;
 $("#rX").onclick = closeReader;
 $("#rFull").onclick = () => goFull(!document.fullscreenElement);
 $("#rView").onclick = () => { const was = !$("#pop").hidden; closePops(); const p = $("#pop"); p.hidden = was; $("#rView").setAttribute("aria-pressed", String(!p.hidden)); wakeInfo(); showChrome(0); };
-function closePops(){ ["#pop","#jump","#recpop","#partpop"].forEach(s => $(s).hidden = true); $("#rView").setAttribute("aria-pressed", "false"); }
+function closePops(){ ["#pop","#jump","#recpop","#partpop","#setpop"].forEach(s => $(s).hidden = true); $("#rView").setAttribute("aria-pressed", "false"); }
 function drawJump(){ const n = R.doc ? R.doc.numPages : 1; const r = $("#jumpR"); r.max = n; r.value = R.page; $("#jumpN").textContent = R.page + " / " + n; }
 $("#rTr").onclick = () => { if(!R.score) return; closePops(); const s = S.scores[R.score.id] || R.score; if(s.mx) mxSheet(s); else claudeSheet(s); };
 $("#rShare").onclick = () => { if(!R.score || !R.doc) return; closePops(); shareSheet(S.scores[R.score.id] || R.score); };
@@ -1984,6 +1995,17 @@ $("#jumpL").onclick = () => { if(R.doc){ R.page = R.doc.numPages; R.half = false
 $("#rAnnot").onclick = () => setAnnot(!R.annot);
 $("#sNext").onclick = () => { if(R.idx < R.ids.length - 1) loadScore(R.idx + 1, 1); };
 $("#sPrev").onclick = () => { if(R.idx > 0) loadScore(R.idx - 1, 1); };
+$("#sPos").onclick = () => {
+  const was = !$("#setpop").hidden; closePops();
+  if(!was && R.list){
+    $("#setpopT").textContent = R.list.name || "Programma";
+    $("#setList").innerHTML = R.ids.map((id, i) => { const x = S.scores[id]; return x ? '<button type="button" data-i="' + i + '" aria-pressed="' + (i === R.idx) + '"><em>' + (i + 1) + "</em>" + esc(x.title) + "</button>" : ""; }).join("");
+    $("#setpop").hidden = false;
+    const cur = $('#setList [aria-pressed="true"]'); if(cur) cur.scrollIntoView({ block:"nearest" });
+  }
+  showChrome(0);
+};
+$("#setList").onclick = e => { const b = e.target.closest("[data-i]"); if(!b) return; closePops(); const i = +b.dataset.i; if(i !== R.idx) loadScore(i, 1); };
 $("#pop").addEventListener("click", e => {
   const b = e.target.closest(".seg button"); if(!b) return;
   SET[b.parentElement.dataset.set] = b.dataset.v; saveSettings(); applySettings(); renderView("top");
