@@ -112,6 +112,11 @@ body.drag #lib{outline:3px dashed var(--brass-fill);outline-offset:-8px}
 .checks label span{flex:1;min-width:0;overflow-wrap:anywhere}
 .checks label small{color:var(--muted);font-size:13px}
 .checks .none{padding:10px;color:var(--muted);font-size:14px}
+.set{cursor:pointer}
+.sethead{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px}
+.sethead .sht{flex:1;min-width:0}
+.sethead h2{margin:0;font-family:var(--display);font-size:24px}
+.sethead .meta{display:flex;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:14px;margin-top:4px}
 .set .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:6px}
 
 /* ---------- sheets (dialogs) ---------- */
@@ -246,8 +251,6 @@ button.pgno{background:transparent;border:1px solid var(--chrome-line);border-ra
 .pop.setpop{top:auto;right:auto;left:50%;transform:translateX(-50%);bottom:calc(74px + env(safe-area-inset-bottom,0px));max-height:calc(100vh - 160px);overflow:auto}
 .parts button em{font-style:normal;color:var(--chrome-muted);margin-right:10px;font-variant-numeric:tabular-nums}
 .parts button[aria-pressed="true"] em{color:#111}
-.set ol button{all:unset;cursor:pointer;display:block;padding:2px 0}
-.set ol button:hover,.set ol button:focus-visible{text-decoration:underline}
 .setbar .cb span{max-width:28vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .pop{position:absolute;right:max(12px,env(safe-area-inset-right,0px));top:calc(70px + env(safe-area-inset-top,0px));z-index:6;background:#1B1D21;border:1px solid var(--chrome-line);border-radius:14px;padding:16px;width:min(340px,calc(100vw - 32px));box-sizing:border-box;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 50px rgba(0,0,0,.5)}
@@ -645,7 +648,7 @@ const IDB = (function(){
 })();
 
 /* ================= app state + store ================= */
-const S = { mode:"local", readOnly:false, orchestras:{}, scores:{}, setlists:{}, filter: ls("filter") || "all", q:"", tab: ls("tab") || "scores", sort: ls("sort") || "title" };
+const S = { mode:"local", readOnly:false, orchestras:{}, scores:{}, setlists:{}, filter: ls("filter") || "all", q:"", tab: ls("tab") || "scores", sort: ls("sort") || "title", openSet: ls("openSet") || null };
 const Store = {
   db:null, assets:null,
   async init(){
@@ -1407,7 +1410,7 @@ function mergeSheet(src, dst){
 const DG = { t:0, on:false, src:null, ghost:null, over:null, x:0, y:0, block:false };
 function dgEnd(){ clearTimeout(DG.t); if(DG.ghost) DG.ghost.remove(); $$(".card.lift,.card.drop").forEach(c => c.classList.remove("lift", "drop")); DG.on = false; DG.ghost = null; DG.over = null; }
 $("#view").addEventListener("pointerdown", e => {
-  const card = e.target.closest(".card"); if(!card || S.readOnly || e.target.closest(".more,.listen") || (e.pointerType === "mouse" && e.button !== 0)) return;
+  const card = e.target.closest(".card"); if(!card || card.hasAttribute("data-si") || S.readOnly || e.target.closest(".more,.listen") || (e.pointerType === "mouse" && e.button !== 0)) return;
   DG.src = card; DG.x = e.clientX; DG.y = e.clientY; clearTimeout(DG.t);
   DG.t = setTimeout(() => {
     DG.on = true; DG.block = true; card.classList.add("lift");
@@ -1496,10 +1499,12 @@ function drawLib(){
       "</div>")).join("") + "</div>";
     $$(".card", v).forEach(c => { const s = S.scores[c.dataset.id]; if(s) ensureThumb(s, $("img", c)); });
   } else {
+    if(S.openSet && !S.setlists[S.openSet]){ S.openSet = null; ls("openSet", null); }
+    if(S.openSet){ v.innerHTML = setFolder(S.setlists[S.openSet]); $$(".card", v).forEach(c => { const s = S.scores[c.dataset.id]; if(s) ensureThumb(s, $("img", c)); }); return; }
     let sets = Object.values(S.setlists).filter(l => S.filter === "all" || l.orchestra === S.filter);
     sets.sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999") || a.name.localeCompare(b.name));
     let out = S.readOnly ? "" : '<div style="display:flex;justify-content:flex-start;margin-bottom:16px"><button class="btn brass" type="button" data-act="newSet">+ Nieuw programma</button></div>';
-    if(!sets.length) out += '<div class="empty"><h2>Nog geen programma\'s</h2><p>Zet de stukken voor een repetitie of concert samen. Tik op een stuk om daar te beginnen; tijdens het spelen kies je via de teller onderaan (bv. 3 / 8) vrij een ander stuk.</p></div>';
+    if(!sets.length) out += '<div class="empty"><h2>Nog geen programma\'s</h2><p>Een programma is een map met de stukken voor een repetitie of concert. Open de map en tik het stuk aan dat je wilt spelen.</p></div>';
     else {
       const groups = {};
       sets.forEach(l => { const y = l.date ? l.date.slice(0, 4) : "Zonder datum"; (groups[y] = groups[y] || []).push(l); });
@@ -1512,9 +1517,19 @@ function drawLib(){
 function setCard(l){ {
       const o = S.orchestras[l.orchestra]; const items = (l.items || []).filter(i => S.scores[i]);
       return '<div class="set" data-id="' + esc(l.id) + '"><h3>' + esc(l.name) + '</h3><div class="meta">' + (o ? '<span class="tag"><i class="dot" style="background:' + esc(o.color) + '"></i>' + esc(o.name) + "</span>" : "") + (l.date ? "<span>" + esc(fmtDate(l.date)) + "</span>" : "") + "<span>" + items.length + (items.length === 1 ? " stuk" : " stukken") + "</span></div>" +
-        (items.length ? "<ol>" + items.map((i, n) => '<li><button type="button" data-act="playAt" data-i="' + n + '" title="Begin bij dit stuk">' + esc(S.scores[i].title) + "</button></li>").join("") + "</ol>" : '<p class="hint">Nog leeg.</p>') +
-        '<div class="acts" style="justify-content:flex-start"><button class="btn brass sm" type="button" data-act="playSet"' + (items.length ? "" : " disabled") + ">" + ICON.play + " Spelen</button>" + (S.readOnly ? "" : '<button class="btn sm" type="button" data-act="editSet">Bewerken</button>') + "</div></div>";
+        (items.length ? "<ol>" + items.slice(0, 8).map(i => "<li>" + esc(S.scores[i].title) + "</li>").join("") + (items.length > 8 ? "<li>…</li>" : "") + "</ol>" : '<p class="hint">Nog leeg.</p>') +
+        '<div class="acts" style="justify-content:flex-start"><button class="btn brass sm" type="button" data-act="openSet">Openen</button>' + (S.readOnly ? "" : '<button class="btn sm" type="button" data-act="editSet">Bewerken</button>') + "</div></div>";
 } }
+function setFolder(l){
+  const o = S.orchestras[l.orchestra]; const items = (l.items || []).filter(i => S.scores[i]);
+  return '<div class="sethead"><button class="btn sm" type="button" data-act="closeSet">‹ Programma\'s</button>' +
+    '<div class="sht"><h2>' + esc(l.name) + '</h2><div class="meta">' + (o ? '<span class="tag"><i class="dot" style="background:' + esc(o.color) + '"></i>' + esc(o.name) + "</span>" : "") + (l.date ? "<span>" + esc(fmtDate(l.date)) + "</span>" : "") + "<span>" + items.length + (items.length === 1 ? " stuk" : " stukken") + "</span></div></div>" +
+    (S.readOnly ? "" : '<button class="btn sm" type="button" data-act="editSet" data-id="' + esc(l.id) + '">Bewerken</button>') + "</div>" +
+    (items.length ? '<div class="grid">' + items.map((id, n) => { const s = S.scores[id]; return '<div class="card" data-id="' + esc(id) + '" data-si="' + n + '"><button class="open" type="button" data-act="openInSet">' +
+      '<div class="thumb"><img alt="" draggable="false" hidden><div class="ph">𝄢</div><span class="badge">' + (n + 1) + '</span><span class="pages">' + (s.pages || "?") + " p.</span></div>" +
+      '<span class="t">' + esc(s.title) + '</span><span class="m">' + esc([s.part, s.arr ? "arr. " + s.arr : s.composer].filter(Boolean).join(" · ") || " ") + "</span></button></div>"; }).join("") + "</div>"
+    : '<div class="empty"><h2>Deze map is nog leeg</h2><p>Voeg stukken toe via <b>Bewerken</b>, of via ⋯ op een partituur.</p></div>');
+}
 function fmtDate(d){ try{ return new Date(d + "T12:00:00").toLocaleDateString("nl-BE", { weekday:"short", day:"numeric", month:"long", year:"numeric" }); }catch(e){ return d; } }
 
 /* ---- library events ---- */
@@ -1526,7 +1541,7 @@ $("#camGalIn").addEventListener("change", e => { const fs = Array.from(e.target.
 $("#q").addEventListener("input", e => { S.q = e.target.value; renderLib(); });
 $("#sort").addEventListener("change", e => { S.sort = e.target.value; ls("sort", S.sort); renderLib(); });
 $("#tabScores").addEventListener("click", () => { S.tab = "scores"; ls("tab", S.tab); renderLib(); });
-$("#tabSets").addEventListener("click", () => { S.tab = "sets"; ls("tab", S.tab); renderLib(); });
+$("#tabSets").addEventListener("click", () => { if(S.tab === "sets" && S.openSet){ S.openSet = null; ls("openSet", null); } S.tab = "sets"; ls("tab", S.tab); renderLib(); });
 $("#chips").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b) return;
   if(b.dataset.f){ S.filter = b.dataset.f; ls("filter", S.filter); renderLib(); return; }
@@ -1534,16 +1549,18 @@ $("#chips").addEventListener("click", e => {
   if(b.dataset.act === "editOrch") orchSheet(S.orchestras[S.filter]);
 });
 $("#view").addEventListener("click", e => {
-  const b = e.target.closest("button"); if(!b) return;
+  const b = e.target.closest("button");
+  if(!b){ const st = e.target.closest(".set"); if(st && !DG.block){ S.openSet = st.dataset.id; ls("openSet", S.openSet); renderLib(); window.scrollTo(0, 0); } return; }
   const card = b.closest(".card"), set = b.closest(".set");
   if(DG.block) return;
   if(b.dataset.act === "dups"){ dupSheet(); return; }
-  if(b.dataset.act === "open" && card) openReader([card.dataset.id], 0);
+  if(b.dataset.act === "open" && card && !card.hasAttribute("data-si")) openReader([card.dataset.id], 0);
   if(b.dataset.act === "edit" && card) scoreSheet(S.scores[card.dataset.id]);
   if(b.dataset.act === "newSet") setSheet(null);
-  if(b.dataset.act === "editSet" && set) setSheet(S.setlists[set.dataset.id]);
-  if(b.dataset.act === "playAt" && set){ const l = S.setlists[set.dataset.id]; openReader((l.items || []).filter(i => S.scores[i]), +b.dataset.i, l); }
-  if(b.dataset.act === "playSet" && set){ const l = S.setlists[set.dataset.id]; openReader((l.items || []).filter(i => S.scores[i]), 0, l); }
+  if(b.dataset.act === "editSet" && (set || b.dataset.id)) setSheet(S.setlists[set ? set.dataset.id : b.dataset.id]);
+  if(b.dataset.act === "openSet" && set){ S.openSet = set.dataset.id; ls("openSet", S.openSet); renderLib(); window.scrollTo(0, 0); }
+  if(b.dataset.act === "closeSet"){ S.openSet = null; ls("openSet", null); renderLib(); }
+  if(b.dataset.act === "openInSet" && card && S.openSet){ const l = S.setlists[S.openSet]; openReader((l.items || []).filter(i => S.scores[i]), +card.dataset.si, l); }
 });
 let dragDepth = 0;
 document.addEventListener("dragenter", e => { if(!$("#reader").hidden || S.readOnly) return; if(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files")){ dragDepth++; document.body.classList.add("drag"); } });
@@ -1877,8 +1894,7 @@ async function next(){
   if(R.half){ R.half = false; R.page += 1; flash("r"); await renderView("top"); return; }
   if(halfOk()){ R.half = true; flash("r"); await renderView("top"); return; }
   if(R.page + R.count <= n){ R.page += R.count; flash("r"); await renderView("top"); return; }
-  if(R.list && R.idx < R.ids.length - 1){ flash("r"); await loadScore(R.idx + 1, 1); endMsg(R.score.title); return; }
-  endMsg(R.list ? "Einde van het programma" : "Laatste pagina");
+  endMsg("Laatste pagina");
 }
 async function prev(){
   if(!R.doc) return;
@@ -1887,7 +1903,6 @@ async function prev(){
   }
   if(R.half){ R.half = false; flash("l"); await renderView("top"); return; }
   if(R.page > 1){ R.page = Math.max(1, R.page - R.count); flash("l"); await renderView(SET.fit === "width" ? "bottom" : "top"); return; }
-  if(R.list && R.idx > 0){ flash("l"); await loadScore(R.idx - 1, -1); endMsg(R.score.title); return; }
   endMsg("Eerste pagina");
 }
 function showChrome(ms){
