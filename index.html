@@ -112,6 +112,17 @@ body.drag #lib{outline:3px dashed var(--brass-fill);outline-offset:-8px}
 .checks label span{flex:1;min-width:0;overflow-wrap:anywhere}
 .checks label small{color:var(--muted);font-size:13px}
 .checks .none{padding:10px;color:var(--muted);font-size:14px}
+.set{cursor:pointer}
+.mute{display:inline-flex;align-items:center;gap:5px;align-self:flex-start;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--ink);color:var(--bg);max-width:100%;line-height:1.3}
+.mute svg{flex:none}
+.mute b{font-weight:800}
+.sethead .mute{font-size:14px;padding:5px 12px;margin-top:8px}
+.parts button{display:flex;align-items:center}
+.parts .pm{margin-left:auto;padding-left:10px;font-size:12px;font-weight:700;opacity:.75}
+.sethead{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px}
+.sethead .sht{flex:1;min-width:0}
+.sethead h2{margin:0;font-family:var(--display);font-size:24px}
+.sethead .meta{display:flex;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:14px;margin-top:4px}
 .set .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:6px}
 
 /* ---------- sheets (dialogs) ---------- */
@@ -243,6 +254,9 @@ button.pgno{background:transparent;border:1px solid var(--chrome-line);border-ra
 #reader.hidechrome .setbar{opacity:0;pointer-events:none}
 #reader.annot .setbar{display:none}
 .setbar .cb{background:var(--chrome);backdrop-filter:blur(10px)}
+.pop.setpop{top:auto;right:auto;left:50%;transform:translateX(-50%);bottom:calc(74px + env(safe-area-inset-bottom,0px));max-height:calc(100vh - 160px);overflow:auto}
+.parts button em{font-style:normal;color:var(--chrome-muted);margin-right:10px;font-variant-numeric:tabular-nums}
+.parts button[aria-pressed="true"] em{color:#111}
 .setbar .cb span{max-width:28vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .pop{position:absolute;right:max(12px,env(safe-area-inset-right,0px));top:calc(70px + env(safe-area-inset-top,0px));z-index:6;background:#1B1D21;border:1px solid var(--chrome-line);border-radius:14px;padding:16px;width:min(340px,calc(100vw - 32px));box-sizing:border-box;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 50px rgba(0,0,0,.5)}
@@ -460,6 +474,11 @@ body.reading .tk,body.reading .tk-pill{bottom:calc(76px + env(safe-area-inset-bo
     <div class="parts" id="partList"></div>
   </div>
 
+  <div class="pop setpop" id="setpop" hidden>
+    <h3 id="setpopT">Programma</h3>
+    <div class="parts" id="setList"></div>
+  </div>
+
   <div class="pop" id="jump" hidden>
     <h3>Naar pagina</h3>
     <div class="jumpn" id="jumpN"></div>
@@ -498,7 +517,7 @@ body.reading .tk,body.reading .tk-pill{bottom:calc(76px + env(safe-area-inset-bo
 
   <div class="setbar" id="setbar" hidden>
     <button class="cb" id="sPrev" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span id="sPrevT"></span></button>
-    <span class="cb" id="sPos" style="pointer-events:none"></span>
+    <button class="cb" id="sPos" type="button" aria-label="Kies een stuk uit het programma"></button>
     <button class="cb" id="sNext" type="button"><span id="sNextT"></span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
   </div>
 
@@ -599,6 +618,7 @@ const ICON = {
   text:'<span style="font-family:var(--engrave);font-size:22px;font-style:italic">mf</span>',
   undo:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>',
   redo:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>',
+  mute:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h3l9 4v4l-9 4H4z"/><path d="M16 10h4v4h-4"/></svg>',
   dots:'<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
   up:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>',
   down:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
@@ -635,7 +655,7 @@ const IDB = (function(){
 })();
 
 /* ================= app state + store ================= */
-const S = { mode:"local", readOnly:false, orchestras:{}, scores:{}, setlists:{}, filter: ls("filter") || "all", q:"", tab: ls("tab") || "scores", sort: ls("sort") || "title" };
+const S = { mode:"local", readOnly:false, orchestras:{}, scores:{}, setlists:{}, filter: ls("filter") || "all", q:"", tab: ls("tab") || "scores", sort: ls("sort") || "title", openSet: ls("openSet") || null };
 const Store = {
   db:null, assets:null,
   async init(){
@@ -1397,7 +1417,7 @@ function mergeSheet(src, dst){
 const DG = { t:0, on:false, src:null, ghost:null, over:null, x:0, y:0, block:false };
 function dgEnd(){ clearTimeout(DG.t); if(DG.ghost) DG.ghost.remove(); $$(".card.lift,.card.drop").forEach(c => c.classList.remove("lift", "drop")); DG.on = false; DG.ghost = null; DG.over = null; }
 $("#view").addEventListener("pointerdown", e => {
-  const card = e.target.closest(".card"); if(!card || S.readOnly || e.target.closest(".more,.listen") || (e.pointerType === "mouse" && e.button !== 0)) return;
+  const card = e.target.closest(".card"); if(!card || card.hasAttribute("data-si") || S.readOnly || e.target.closest(".more,.listen") || (e.pointerType === "mouse" && e.button !== 0)) return;
   DG.src = card; DG.x = e.clientX; DG.y = e.clientY; clearTimeout(DG.t);
   DG.t = setTimeout(() => {
     DG.on = true; DG.block = true; card.classList.add("lift");
@@ -1478,7 +1498,7 @@ function drawLib(){
           '<span class="t">' + esc(s._n > 1 ? partInfo(s).base : s.title) + "</span>" +
           '<span class="m">' + esc((s._n > 1 ? [partInfo(s).part, s.arr ? "arr. " + s.arr : s.composer] : [s.part, s.arr ? "arr. " + s.arr : s.composer]).filter(Boolean).join(" · ") || " ") + "</span>" +
           (s._n > 1 ? '<span class="partn">' + s._n + " partijen</span>" : "") +
-          (s.mxLabel ? '<span class="partn">' + esc(s.mxLabel) + "</span>" : "") +
+          (s.mxLabel ? '<span class="partn">' + esc(s.mxLabel) + "</span>" : "") + muteTag(mutesOf(s)) +
         "</button>" +
         '<div class="tags">' + orchTags(s.orchestras) + "</div>" +
         '<a class="listen' + (s.link ? "" : " nolink") + '" href="' + esc(listenUrl(s)) + '" target="_blank" rel="noopener" title="' + (s.link ? "Beluisteren op YouTube" : "Zoeken op YouTube") + '">' + ICON.play + (s.link ? " Beluisteren" : " Zoek op YouTube") + "</a>" +
@@ -1486,10 +1506,12 @@ function drawLib(){
       "</div>")).join("") + "</div>";
     $$(".card", v).forEach(c => { const s = S.scores[c.dataset.id]; if(s) ensureThumb(s, $("img", c)); });
   } else {
+    if(S.openSet && !S.setlists[S.openSet]){ S.openSet = null; ls("openSet", null); }
+    if(S.openSet){ v.innerHTML = setFolder(S.setlists[S.openSet]); $$(".card", v).forEach(c => { const s = S.scores[c.dataset.id]; if(s) ensureThumb(s, $("img", c)); }); return; }
     let sets = Object.values(S.setlists).filter(l => S.filter === "all" || l.orchestra === S.filter);
     sets.sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999") || a.name.localeCompare(b.name));
     let out = S.readOnly ? "" : '<div style="display:flex;justify-content:flex-start;margin-bottom:16px"><button class="btn brass" type="button" data-act="newSet">+ Nieuw programma</button></div>';
-    if(!sets.length) out += '<div class="empty"><h2>Nog geen programma\'s</h2><p>Zet de stukken voor een repetitie of concert in volgorde. Tijdens het spelen ga je vanzelf door naar het volgende stuk.</p></div>';
+    if(!sets.length) out += '<div class="empty"><h2>Nog geen programma\'s</h2><p>Een programma is een map met de stukken voor een repetitie of concert. Open de map en tik het stuk aan dat je wilt spelen.</p></div>';
     else {
       const groups = {};
       sets.forEach(l => { const y = l.date ? l.date.slice(0, 4) : "Zonder datum"; (groups[y] = groups[y] || []).push(l); });
@@ -1501,10 +1523,24 @@ function drawLib(){
 }
 function setCard(l){ {
       const o = S.orchestras[l.orchestra]; const items = (l.items || []).filter(i => S.scores[i]);
-      return '<div class="set" data-id="' + esc(l.id) + '"><h3>' + esc(l.name) + '</h3><div class="meta">' + (o ? '<span class="tag"><i class="dot" style="background:' + esc(o.color) + '"></i>' + esc(o.name) + "</span>" : "") + (l.date ? "<span>" + esc(fmtDate(l.date)) + "</span>" : "") + "<span>" + items.length + (items.length === 1 ? " stuk" : " stukken") + "</span></div>" +
+      return '<div class="set" data-id="' + esc(l.id) + '"><h3>' + esc(l.name) + '</h3><div class="meta">' + (o ? '<span class="tag"><i class="dot" style="background:' + esc(o.color) + '"></i>' + esc(o.name) + "</span>" : "") + (l.date ? "<span>" + esc(fmtDate(l.date)) + "</span>" : "") + "<span>" + items.length + (items.length === 1 ? " stuk" : " stukken") + "</span></div>" + muteTag(setMutes(items), "Dempers:") +
         (items.length ? "<ol>" + items.slice(0, 8).map(i => "<li>" + esc(S.scores[i].title) + "</li>").join("") + (items.length > 8 ? "<li>…</li>" : "") + "</ol>" : '<p class="hint">Nog leeg.</p>') +
-        '<div class="acts" style="justify-content:flex-start"><button class="btn brass sm" type="button" data-act="playSet"' + (items.length ? "" : " disabled") + ">" + ICON.play + " Spelen</button>" + (S.readOnly ? "" : '<button class="btn sm" type="button" data-act="editSet">Bewerken</button>') + "</div></div>";
+        '<div class="acts" style="justify-content:flex-start"><button class="btn brass sm" type="button" data-act="openSet">Openen</button>' + (S.readOnly ? "" : '<button class="btn sm" type="button" data-act="editSet">Bewerken</button>') + "</div></div>";
 } }
+const MUTES = ["Straight","Cup","Harmon","Plunger","Bucket","Solotone","Pixie","Hat"];
+function mutesOf(s){ return (s && s.mutes || []).filter(Boolean); }
+function setMutes(items){ const seen = []; items.forEach(id => mutesOf(S.scores[id]).forEach(m => { if(!seen.some(x => x.toLowerCase() === m.toLowerCase())) seen.push(m); })); return seen.sort((a, b) => { const ia = MUTES.indexOf(a), ib = MUTES.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b); }); }
+function muteTag(ms, lbl){ return ms.length ? '<span class="mute">' + ICON.mute + (lbl ? "<b>" + lbl + "</b> " : "") + esc(ms.join(", ")) + "</span>" : ""; }
+function setFolder(l){
+  const o = S.orchestras[l.orchestra]; const items = (l.items || []).filter(i => S.scores[i]);
+  return '<div class="sethead"><button class="btn sm" type="button" data-act="closeSet">‹ Programma\'s</button>' +
+    '<div class="sht"><h2>' + esc(l.name) + '</h2><div class="meta">' + (o ? '<span class="tag"><i class="dot" style="background:' + esc(o.color) + '"></i>' + esc(o.name) + "</span>" : "") + (l.date ? "<span>" + esc(fmtDate(l.date)) + "</span>" : "") + "<span>" + items.length + (items.length === 1 ? " stuk" : " stukken") + "</span></div>" + muteTag(setMutes(items), "Dempers nodig:") + "</div>" +
+    (S.readOnly ? "" : '<button class="btn sm" type="button" data-act="editSet" data-id="' + esc(l.id) + '">Bewerken</button>') + "</div>" +
+    (items.length ? '<div class="grid">' + items.map((id, n) => { const s = S.scores[id]; return '<div class="card" data-id="' + esc(id) + '" data-si="' + n + '"><button class="open" type="button" data-act="openInSet">' +
+      '<div class="thumb"><img alt="" draggable="false" hidden><div class="ph">𝄢</div><span class="badge">' + (n + 1) + '</span><span class="pages">' + (s.pages || "?") + " p.</span></div>" +
+      '<span class="t">' + esc(s.title) + '</span><span class="m">' + esc([s.part, s.arr ? "arr. " + s.arr : s.composer].filter(Boolean).join(" · ") || " ") + "</span>" + muteTag(mutesOf(s)) + "</button>" + (S.readOnly ? "" : '<button class="more" type="button" data-act="edit" aria-label="' + esc(s.title) + ' bewerken">' + ICON.dots + "</button>") + "</div>"; }).join("") + "</div>"
+    : '<div class="empty"><h2>Deze map is nog leeg</h2><p>Voeg stukken toe via <b>Bewerken</b>, of via ⋯ op een partituur.</p></div>');
+}
 function fmtDate(d){ try{ return new Date(d + "T12:00:00").toLocaleDateString("nl-BE", { weekday:"short", day:"numeric", month:"long", year:"numeric" }); }catch(e){ return d; } }
 
 /* ---- library events ---- */
@@ -1516,7 +1552,7 @@ $("#camGalIn").addEventListener("change", e => { const fs = Array.from(e.target.
 $("#q").addEventListener("input", e => { S.q = e.target.value; renderLib(); });
 $("#sort").addEventListener("change", e => { S.sort = e.target.value; ls("sort", S.sort); renderLib(); });
 $("#tabScores").addEventListener("click", () => { S.tab = "scores"; ls("tab", S.tab); renderLib(); });
-$("#tabSets").addEventListener("click", () => { S.tab = "sets"; ls("tab", S.tab); renderLib(); });
+$("#tabSets").addEventListener("click", () => { if(S.tab === "sets" && S.openSet){ S.openSet = null; ls("openSet", null); } S.tab = "sets"; ls("tab", S.tab); renderLib(); });
 $("#chips").addEventListener("click", e => {
   const b = e.target.closest("button"); if(!b) return;
   if(b.dataset.f){ S.filter = b.dataset.f; ls("filter", S.filter); renderLib(); return; }
@@ -1524,15 +1560,18 @@ $("#chips").addEventListener("click", e => {
   if(b.dataset.act === "editOrch") orchSheet(S.orchestras[S.filter]);
 });
 $("#view").addEventListener("click", e => {
-  const b = e.target.closest("button"); if(!b) return;
+  const b = e.target.closest("button");
+  if(!b){ const st = e.target.closest(".set"); if(st && !DG.block){ S.openSet = st.dataset.id; ls("openSet", S.openSet); renderLib(); window.scrollTo(0, 0); } return; }
   const card = b.closest(".card"), set = b.closest(".set");
   if(DG.block) return;
   if(b.dataset.act === "dups"){ dupSheet(); return; }
-  if(b.dataset.act === "open" && card) openReader([card.dataset.id], 0);
+  if(b.dataset.act === "open" && card && !card.hasAttribute("data-si")) openReader([card.dataset.id], 0);
   if(b.dataset.act === "edit" && card) scoreSheet(S.scores[card.dataset.id]);
   if(b.dataset.act === "newSet") setSheet(null);
-  if(b.dataset.act === "editSet" && set) setSheet(S.setlists[set.dataset.id]);
-  if(b.dataset.act === "playSet" && set){ const l = S.setlists[set.dataset.id]; openReader((l.items || []).filter(i => S.scores[i]), 0, l); }
+  if(b.dataset.act === "editSet" && (set || b.dataset.id)) setSheet(S.setlists[set ? set.dataset.id : b.dataset.id]);
+  if(b.dataset.act === "openSet" && set){ S.openSet = set.dataset.id; ls("openSet", S.openSet); renderLib(); window.scrollTo(0, 0); }
+  if(b.dataset.act === "closeSet"){ S.openSet = null; ls("openSet", null); renderLib(); }
+  if(b.dataset.act === "openInSet" && card && S.openSet){ const l = S.setlists[S.openSet]; openReader((l.items || []).filter(i => S.scores[i]), +card.dataset.si, l); }
 });
 let dragDepth = 0;
 document.addEventListener("dragenter", e => { if(!$("#reader").hidden || S.readOnly) return; if(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files")){ dragDepth++; document.body.classList.add("drag"); } });
@@ -1570,6 +1609,7 @@ function scoreSheet(s){
     '<label class="field">Link om te beluisteren (YouTube)<input id="fL" type="url" inputmode="url" placeholder="https://www.youtube.com/watch?v=…" value="' + esc(s.link || "") + '"></label>' +
     '<p class="hint" style="margin-top:-8px"><a href="' + esc(ytSearch(s)) + '" target="_blank" rel="noopener" id="fYt">Zoek dit arrangement op YouTube</a> (titel + arrangeur' + (isHafabra(s) ? ' + hafabra' : '') + ') en plak de link van de juiste opname hierboven. Geldt voor alle partijen van het stuk.</p>' +
     '<div class="field">Orkesten<div class="pick">' + (orchs.length ? orchs.map(o => '<label><input type="checkbox" value="' + esc(o.id) + '"' + ((s.orchestras || []).includes(o.id) ? " checked" : "") + '><i class="dot" style="width:10px;height:10px;border-radius:50%;background:' + esc(o.color) + '"></i>' + esc(o.name) + "</label>").join("") : '<span class="hint">Maak eerst een orkest aan met + Orkest.</span>') + "</div></div>" +
+    '<div class="field">Dempers<div class="pick" id="fM">' + MUTES.map(m => '<label><input type="checkbox" value="' + m + '"' + (mutesOf(s).some(x => x.toLowerCase() === m.toLowerCase()) ? " checked" : "") + ">" + m + "</label>").join("") + '</div><input id="fMo" placeholder="Andere, bv. Wah-wah (scheiden met komma)" value="' + esc(mutesOf(s).filter(x => !MUTES.some(m => m.toLowerCase() === x.toLowerCase())).join(", ")) + '"></div>' +
     (sets.length ? '<label class="field">Toevoegen aan programma<select id="fS"><option value="">Geen</option>' + sets.map(l => '<option value="' + esc(l.id) + '"' + ((l.items || []).includes(s.id) ? " disabled" : "") + ">" + esc(l.name) + ((l.items || []).includes(s.id) ? " (staat er al in)" : "") + "</option>").join("") + "</select></label>" : "") +
     '<div class="acts"><button class="btn ghost danger spacer" type="button" id="fDel">Verwijderen</button><button class="btn ghost" type="button" id="fX">Annuleren</button><button class="btn primary" type="button" id="fOk">Opslaan</button></div>',
     (sh, close) => {
@@ -1577,7 +1617,7 @@ function scoreSheet(s){
       const upd = () => { $("#fYt", sh).href = ytSearch({ title:$("#fT", sh).value, part:$("#fP", sh).value, group:$("#fG", sh).value, arr:$("#fA", sh).value, composer:$("#fC", sh).value, orchestras:s.orchestras }); };
       ["#fT","#fA","#fC","#fP","#fG"].forEach(k => $(k, sh).addEventListener("input", upd));
       $("#fOk", sh).onclick = async () => {
-        const fields = { title:$("#fT", sh).value.trim() || s.title, composer:$("#fC", sh).value.trim(), arr:$("#fA", sh).value.trim(), part:$("#fP", sh).value.trim(), link:$("#fL", sh).value.trim(), orchestras:$$(".pick input:checked", sh).map(i => i.value), group:$("#fG", sh).value.trim() };
+        const fields = { title:$("#fT", sh).value.trim() || s.title, composer:$("#fC", sh).value.trim(), arr:$("#fA", sh).value.trim(), part:$("#fP", sh).value.trim(), link:$("#fL", sh).value.trim(), orchestras:$$(".pick:not(#fM) input:checked", sh).map(i => i.value), mutes:$$("#fM input:checked", sh).map(i => i.value).concat($("#fMo", sh).value.split(",").map(x => x.trim()).filter(Boolean)), group:$("#fG", sh).value.trim() };
         if(fields.group && !fields.part) fields.part = partInfo(s).part || fields.title;
         const rec = Object.assign({}, s, fields); delete rec._n; if(!rec.group) delete rec.group;
         await Store.put("scores", s.id, rec);
@@ -1698,13 +1738,13 @@ function closeReader(){
   if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
   if(wakeLock){ const w = wakeLock; wakeLock = null; w.release().catch(() => {}); }
   if(window.tkMini) window.tkMini.hide();
-  noSleep(false); if(REC.on) recStop(); ["#jump","#recpop","#partpop"].forEach(s => $(s).hidden = true);
+  noSleep(false); if(REC.on) recStop(); ["#jump","#recpop","#partpop","#setpop"].forEach(s => $(s).hidden = true);
   renderLib();
 }
 async function loadScore(idx, page){
   const tok = ++R.token;
   Object.keys(R.saveT).forEach(k => { clearTimeout(R.saveT[k]); flushMarks(+k); });
-  R.idx = idx; R.score = S.scores[R.ids[idx]]; R.sizes = {}; R.trim = {}; R.half = false; $("#jump").hidden = true; $("#recpop").hidden = true; $("#partpop").hidden = true; R.cache.clear(); R.marks = {}; R.undo = []; R.redo = []; R.saveT = {};
+  R.idx = idx; R.score = S.scores[R.ids[idx]]; R.sizes = {}; R.trim = {}; R.half = false; $("#jump").hidden = true; $("#recpop").hidden = true; $("#partpop").hidden = true; $("#setpop").hidden = true; R.cache.clear(); R.marks = {}; R.undo = []; R.redo = []; R.saveT = {};
   if(R.doc){ R.doc.destroy(); R.doc = null; }
   pagesEl.innerHTML = ""; $("#loading").hidden = false; $("#loading").textContent = "Partituur laden…";
   $("#rTitle").textContent = R.score.title;
@@ -1712,6 +1752,7 @@ async function loadScore(idx, page){
   $("#rListen").href = listenUrl(R.score);
   $("#rTr").hidden = S.readOnly;
   if(R.score.mxLabel) $("#rSub").textContent = [R.score.mxLabel, $("#rSub").textContent].filter(Boolean).join(" · ");
+  if(mutesOf(R.score).length) $("#rSub").textContent = "Demper: " + mutesOf(R.score).join(", ") + " · " + $("#rSub").textContent;
   { const sib = partInfo(R.score).part ? siblings(R.score) : []; $("#rPart").hidden = sib.length < 2; $("#rPartT").textContent = partInfo(R.score).part; if(sib.length > 1) $("#rTitle").textContent = partInfo(R.score).base; }
   updateSetbar(); recCount();
   try{
@@ -1866,8 +1907,7 @@ async function next(){
   if(R.half){ R.half = false; R.page += 1; flash("r"); await renderView("top"); return; }
   if(halfOk()){ R.half = true; flash("r"); await renderView("top"); return; }
   if(R.page + R.count <= n){ R.page += R.count; flash("r"); await renderView("top"); return; }
-  if(R.list && R.idx < R.ids.length - 1){ flash("r"); await loadScore(R.idx + 1, 1); endMsg(R.score.title); return; }
-  endMsg(R.list ? "Einde van het programma" : "Laatste pagina");
+  endMsg("Laatste pagina");
 }
 async function prev(){
   if(!R.doc) return;
@@ -1876,7 +1916,6 @@ async function prev(){
   }
   if(R.half){ R.half = false; flash("l"); await renderView("top"); return; }
   if(R.page > 1){ R.page = Math.max(1, R.page - R.count); flash("l"); await renderView(SET.fit === "width" ? "bottom" : "top"); return; }
-  if(R.list && R.idx > 0){ flash("l"); await loadScore(R.idx - 1, -1); endMsg(R.score.title); return; }
   endMsg("Eerste pagina");
 }
 function showChrome(ms){
@@ -1900,7 +1939,7 @@ stage.addEventListener("pointercancel", () => { gest = null; });
 stage.addEventListener("pointerup", e => {
   if(!gest || gest.id !== e.pointerId) return;
   const dx = e.clientX - gest.x, dy = e.clientY - gest.y, dt = Date.now() - gest.t; gest = null;
-  if(!$("#pop").hidden || !$("#jump").hidden || !$("#recpop").hidden || !$("#partpop").hidden){ closePops(); return; }
+  if(!$("#pop").hidden || !$("#jump").hidden || !$("#recpop").hidden || !$("#partpop").hidden || !$("#setpop").hidden){ closePops(); return; }
   if(Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.4 && dt < 700){ if(dx < 0) next(); else prev(); return; }
   if(Math.abs(dx) < 12 && Math.abs(dy) < 12 && dt < 450){
     const r = stage.getBoundingClientRect(); const fx = (e.clientX - r.left) / r.width;
@@ -1963,7 +2002,7 @@ $("#rBack").onclick = closeReader;
 $("#rX").onclick = closeReader;
 $("#rFull").onclick = () => goFull(!document.fullscreenElement);
 $("#rView").onclick = () => { const was = !$("#pop").hidden; closePops(); const p = $("#pop"); p.hidden = was; $("#rView").setAttribute("aria-pressed", String(!p.hidden)); wakeInfo(); showChrome(0); };
-function closePops(){ ["#pop","#jump","#recpop","#partpop"].forEach(s => $(s).hidden = true); $("#rView").setAttribute("aria-pressed", "false"); }
+function closePops(){ ["#pop","#jump","#recpop","#partpop","#setpop"].forEach(s => $(s).hidden = true); $("#rView").setAttribute("aria-pressed", "false"); }
 function drawJump(){ const n = R.doc ? R.doc.numPages : 1; const r = $("#jumpR"); r.max = n; r.value = R.page; $("#jumpN").textContent = R.page + " / " + n; }
 $("#rTr").onclick = () => { if(!R.score) return; closePops(); const s = S.scores[R.score.id] || R.score; if(s.mx) mxSheet(s); else claudeSheet(s); };
 $("#rShare").onclick = () => { if(!R.score || !R.doc) return; closePops(); shareSheet(S.scores[R.score.id] || R.score); };
@@ -1984,6 +2023,18 @@ $("#jumpL").onclick = () => { if(R.doc){ R.page = R.doc.numPages; R.half = false
 $("#rAnnot").onclick = () => setAnnot(!R.annot);
 $("#sNext").onclick = () => { if(R.idx < R.ids.length - 1) loadScore(R.idx + 1, 1); };
 $("#sPrev").onclick = () => { if(R.idx > 0) loadScore(R.idx - 1, 1); };
+$("#sPos").onclick = () => {
+  const was = !$("#setpop").hidden; closePops();
+  if(!was && R.list){
+    $("#setpopT").textContent = R.list.name || "Programma";
+    { const ms = setMutes(R.ids); if(ms.length) $("#setpopT").textContent += " · dempers: " + ms.join(", "); }
+    $("#setList").innerHTML = R.ids.map((id, i) => { const x = S.scores[id]; return x ? '<button type="button" data-i="' + i + '" aria-pressed="' + (i === R.idx) + '"><em>' + (i + 1) + "</em>" + esc(x.title) + (mutesOf(x).length ? '<small class="pm">' + esc(mutesOf(x).join(", ")) + "</small>" : "") + "</button>" : ""; }).join("");
+    $("#setpop").hidden = false;
+    const cur = $('#setList [aria-pressed="true"]'); if(cur) cur.scrollIntoView({ block:"nearest" });
+  }
+  showChrome(0);
+};
+$("#setList").onclick = e => { const b = e.target.closest("[data-i]"); if(!b) return; closePops(); const i = +b.dataset.i; if(i !== R.idx) loadScore(i, 1); };
 $("#pop").addEventListener("click", e => {
   const b = e.target.closest(".seg button"); if(!b) return;
   SET[b.parentElement.dataset.set] = b.dataset.v; saveSettings(); applySettings(); renderView("top");
